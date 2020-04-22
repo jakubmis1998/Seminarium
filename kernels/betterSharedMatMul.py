@@ -56,7 +56,7 @@ multiplicate_matrixes = mod.get_function("multiplicate_matrixes")
 start = cuda.Event()
 end = cuda.Event()
 
-N = 16384
+N = 4096
 print("N = {}".format(N))
 a = np.random.randn(N, N).astype(np.float32)
 b = np.random.randn(N, N).astype(np.float32)
