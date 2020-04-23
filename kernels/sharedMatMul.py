@@ -61,7 +61,7 @@ multiplicate_matrixes = mod.get_function("multiplicate_matrixes")
 start = cuda.Event()
 end = cuda.Event()
 
-N = 16384
+N = 32
 print("N = {}".format(N))
 a = np.random.randn(N, N).astype(np.float32)
 b = np.random.randn(N, N).astype(np.float32)
@@ -83,6 +83,10 @@ print("GPU: \t%.7f s" % secs)
 s = time.time()
 result_cpu = np.dot(a, b)
 # result_cpu = cpu_matmul(a, b, N)
+print("CPU#2: \t%.7f s" % (time.time() - s))
+
+s = time.time()
+result_cpu_2 = cpu_matmul(a, b, N)
 print("CPU: \t%.7f s" % (time.time() - s))
 
 # print("Computation error:\n {}".format(abs(np.subtract(result_cpu, result_gpu))))

@@ -51,32 +51,25 @@ a = np.random.randn(N, N).astype(np.float32)
 b = np.random.randn(N, N).astype(np.float32)
 result = gpuarray.empty((N, N), np.float32)
 
+# COPY IN
 start.record()
 a_gpu = gpuarray.to_gpu(a)
 b_gpu = gpuarray.to_gpu(b)
-end.record()
-end.synchronize()
-secs = start.time_till(end)*1e-3
-print("Copy in: \t%.7f s" % secs)
 
-start.record()
 # GRID 2D - by wszystkie pary były dostępne np. 2 bloki - (0,0) (0,1) ... (0, 31) ... (31, 31)
 multiplicate_matrixes(np.int32(N), a_gpu, b_gpu, result, block=(32, 32, 1), grid=((N+31)//32, (N+31)//32, 1))
-end.record()
-end.synchronize()
-secs = start.time_till(end)*1e-3
-print("GPU: \t\t%.7f s" % secs)
 
-start.record()
+# COPY OUT
 result_gpu = result.get()
 end.record()
 end.synchronize()
 secs = start.time_till(end)*1e-3
-print("Copy out: \t%.7f s" % secs)
+print("GPU: \t%.7f s" % secs)
 
+# CPU + NUMPY
 s = time.time()
 result_cpu = np.dot(a, b)
-print("CPU: \t\t%.7f s" % (time.time() - s))
+print("CPU: \t%.7f s" % (time.time() - s))
 
 # print("Computation error:\n {}".format(abs(np.subtract(result_cpu, result_gpu))))
 
