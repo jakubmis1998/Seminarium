@@ -18,11 +18,9 @@ print("CPU: %.7f s" % (time.time() - s))
 
 gpu_time = time.time()
 
-a = [[1,2],[3,4]]
-
 # Create two random pyviennacl matrixes
-a_gpu = vienna.Matrix(a)
-b_gpu = vienna.Matrix(a)
+a_gpu = vienna.Matrix(a_cpu)
+b_gpu = vienna.Matrix(b_cpu)
 print("copy in: %.7f s" % (time.time() - gpu_time))
 # Create an empty pyopencl destination array 
 result_gpu = linalg.prod(a_gpu, b_gpu).as_ndarray()
