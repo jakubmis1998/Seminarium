@@ -6,6 +6,7 @@ import pycuda.autoinit
 import pycuda.gpuarray as gpuarray
 import skcuda.fft as cu_fft
 import pycuda.driver as cuda
+import h5py
 
 """
 FFT przy użyciu SKCUDA
@@ -60,20 +61,14 @@ def pikoFFT(arr):
 
 
 if __name__ == '__main__':
-    sizes = [2**4, 2**8, 2**12, 2**16, 2**20, 2**24, 2**28]
-    l = [1, 2, 3, 3, 2, 1, 0, 0, 1, 2, 3, 3, 0, 0, 1, 2]
-
-    N = len(l)
-
-    print("SKCUDA FFT")
-
-    for size in sizes:
-        data = (size / 16) * l
-        N = size
-
-        # Przygotowanie danych
-        arr = np.array(data)
-        pikoFFT(arr)
+    with h5py.File("/home/jakubmis1998/Seminarium/hdf5/plik.hdf5", "r") as hdf_file:
+        
+        print("SKCUDA FFT")
+        for i in range(len(hdf_file)):
+            l = hdf_file[hdf_file.keys()[(i+5)%7]]
+            N = len(l)
+            arr = np.array(l)
+            pikoFFT(arr)
 
 """
 SKCUDA FFT
