@@ -38,7 +38,7 @@ for size in sizes:
     start = time.time()
 
     # Plan
-    plan = Plan(N, queue=queue, context=context, wait_for_finish=True)
+    plan = Plan(N, queue=queue, context=context)
 
     # Przygotowanie danych na GPU
     data_gpu = cl_array.to_device(queue, data_cpu)
@@ -55,6 +55,7 @@ for size in sizes:
 
     # print(result)
 
+# Wait for finish = True
 """
 PYFFT FFT
 N = 16                  Time = 0.0123880 s
@@ -72,4 +73,23 @@ Traceback (most recent call last):
   File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyfft/cl.py", line 114, in wait
     self._queue.finish()
 pyopencl._cl.LogicError: clFinish failed: INVALID_COMMAND_QUEUE
+"""
+
+"""
+PYFFT FFT
+N = 16                  Time = 5.0155160 s
+N = 256                 Time = 5.0166249 s
+N = 4096                        Time = 5.0173211 s
+N = 65536                       Time = 5.0199249 s
+N = 1048576                     Time = 5.0243330 s
+Traceback (most recent call last):
+  File "pyfft_fft.py", line 54, in <module>
+    result_cpu = result_gpu.get()
+  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyopencl/array.py", line 721, in get
+    ary, event1 = self._get(queue=queue, ary=ary, async_=async_, **kwargs)
+  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyopencl/array.py", line 682, in _get
+    wait_for=self.events, is_blocking=not async_)
+  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyopencl/__init__.py", line 1719, in enqueue_copy
+    return _cl._enqueue_read_buffer(queue, src, dest, **kwargs)
+pyopencl._cl.RuntimeError: clEnqueueReadBuffer failed: OUT_OF_RESOURCES
 """

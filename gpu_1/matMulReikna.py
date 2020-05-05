@@ -20,12 +20,12 @@ res_dev = thr.array((N, N), dtype=numpy.float32)
 print("copy in: %.7f s" % (time.time() - s))
 
 s = time.time()
-dot = MatrixMul(a_dev, b_dev, out_arr=res_dev)
+dot = MatrixMul(a_dev, b_dev, out_arr=res_dev)  # przygotowanie
 print("gpu compute: %.7f s" % (time.time() - s))
 
 s = time.time()
-dotc = dot.compile(thr)
-dotc(res_dev, a_dev, b_dev)
+dotc = dot.compile(thr)  # kompilacja
+dotc(res_dev, a_dev, b_dev)  # wywolanie
 result_gpu = res_dev.get()
 print("copy out: %.7f s" % (time.time() - s))
 print("GPU: %.7f s" % (time.time() - start))
