@@ -10,6 +10,7 @@ import pyopencl.array as cl_array
 """
 FFT przy użyciu PYFFT
 N - potęga dwójki, w przeciwnym razie dopełnić zerami
+Nic nie dała próba bez pętli
 """
 
 platform = cl.get_platforms()[0]  # Select the first platform [0]
@@ -32,7 +33,7 @@ for size in sizes:
 
     # Przygotowanie danych
     data_cpu = np.array(data, np.complex64)  # Wymagana tablica zespolona
-    result_cpu = np.empty(N/2 + 1, np.complex64)
+    result_cpu = np.empty(N, np.complex64)
 
     # Początek pomiaru
     start = time.time()
@@ -48,34 +49,34 @@ for size in sizes:
     plan.execute(data_in=data_gpu.data, data_out=result_gpu.data)
 
     # Zwrócenie danych
-    result_cpu = result_gpu.get()
+    result_cpu = result_gpu.get(queue=queue, ary=result_cpu)
 
     # Koniec pomiaru
     print("N = %d\t\t\tTime = %.7f s" % (N, time.time() - start))
 
     # print(result)
 
-# Wait for finish = True
 """
+Rozmiar tablicy wynikowej : N
 PYFFT FFT
-N = 16                  Time = 0.0123880 s
-N = 256                 Time = 0.0048120 s
-N = 4096                        Time = 0.0056698 s
-N = 65536                       Time = 0.0089841 s
-N = 1048576                     Time = 0.0123160 s
-Traceback (most recent call last):
-  File "pyfft_fft.py", line 48, in <module>
-    plan.execute(data_in=data_gpu.data, data_out=result_gpu.data)
-  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyfft/plan.py", line 271, in _executeInterleaved
-    batch, data_in, data_out)
-  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyfft/plan.py", line 256, in _execute
-    self._context.wait()
-  File "/home/jakubmis1998/.local/lib/python2.7/site-packages/pyfft/cl.py", line 114, in wait
-    self._queue.finish()
-pyopencl._cl.LogicError: clFinish failed: INVALID_COMMAND_QUEUE
+N = 16            Time = 0.0102370 s
+N = 256           Time = 0.0045300 s
+N = 4 096         Time = 0.0059021 s
+N = 65 536        Time = 0.0081079 s
+N = 1 048 576     Time = 0.0152340 s
+N = 16 777 216    Time = 0.1618450 s
+N = 268 435 456   Time = 1.4396060 s
 """
 
 """
+Rozmiar tablicy wynikowej: N//2 + 1 bez get()
+pyopencl._cl.RuntimeError: clBuildProgram failed: <unknown error -9999>
+clBuildProgram failed: <unknown error -9999> - clBuildProgram failed: <unknown error -9999>
+Build on <pyopencl.Device 'GeForce GTX 1070 Ti' on 'NVIDIA CUDA' at 0x55ff90e45d10>:
+"""
+
+"""
+Rozmiar tablicy wynikowej: N//2 + 1 i używam get()
 PYFFT FFT
 N = 16                  Time = 5.0155160 s
 N = 256                 Time = 5.0166249 s

@@ -9,6 +9,7 @@ import time
 """
 FFT przy użyciu REIKNA(OpenCL)
 N - potęga dwójki, w przeciwnym razie dopełnić zerami
+Nic nie dała próba bez pętli
 """
 
 # Wybranie api
@@ -27,7 +28,7 @@ for size in sizes:
 
     # Przygotowanie danych
     data = np.asarray(data, np.complex64)  # wymagana tablica zespolona
-    result_cpu = np.empty(N/2 + 1, np.complex64)
+    result_cpu = np.empty(N//2 + 1, np.complex64)
 
     # Początek pomiaru
     start = time.time()
