@@ -62,6 +62,7 @@ if __name__ == "__main__":
     # Dane CPU
     m = np.random.randint(10, size=(X, Y), dtype=np.int32)
     mask = np.random.randint(10, size=(2*R + 1, 2*R + 1), dtype=np.int32)
+    print(mask)
     result = np.zeros([X, Y], dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
@@ -98,7 +99,7 @@ if __name__ == "__main__":
                 to = MAX(0, col - ry + 1);
                 for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    result[row * X + col] += (((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx * X + dry]);
+                    result[row * X + col] += (((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx * (2*R+1) + dry]);
                 }
             }
         }
