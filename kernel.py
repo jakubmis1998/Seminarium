@@ -37,7 +37,7 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
     R - promien otoczenia
     """
     pola = np.empty([X, Y], dtype=np.int)
-    half_ring = 0  # tu bedzie jakis obiekt
+    half_ring = None  # tu bedzie jakis obiekt
     
     for x0 in range(X):
         lxbound = max(0, x0 - R)
@@ -45,14 +45,14 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
         for y0 in range(Y):
             for x in range(lxbound, rxbound):
                 dx = x0 - x
-                dRx = dx + R
+                drx = dx + R
                 ry = 0  # tu bedzie jakas liczba
                 # Zamieniam sobie miejscami max i min, bo tu zawsze lewa > prawa i nie wykonuje sie nigdy petla
                 for y in range(min(Y, y0 + ry), max(0, y0 - ry + 1)):
                     dry = y + R - y0
-                    pola[x0][y0] += mask[dRx][dry]
+                    pola[x0][y0] += mask[drx][dry]
                     # 0 jeśli m[x0][y0] > m[x][y], else -1
-                    result[x0][y0] += ((m[x0][y0] - m[x][y]) >> 31) * mask[dRx][dry]
+                    result[x0][y0] += ((m[x0][y0] - m[x][y]) >> 31) * mask[drx][dry]
 
 
 if __name__ == "__main__":
@@ -68,11 +68,36 @@ if __name__ == "__main__":
     start = cuda.Event()
     end = cuda.Event()
 
+    """
+    Każdy wątek oblicza jeden element m. Czyli wątków jest X * Y.
+    Każdy wątek oblicza sobie dwie ostatnie pętle.
+    """
+
     # Kernel
     mod = SourceModule("""
-    __global__ void gpu_int_mask_multi_thread(int X, int Y, int R, int** m, int** mask, int** result)
+    #define MAX(a,b) (a)<(b)?(b):(a)
+    #define MIN(a,b) (a)>(b)?(b):(a)
+
+    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int** mask, int* m, int* result)
     {
-        
+        int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
+        int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
+
+        if ((row < X) && (col < Y)) {
+            int x, y, dx, drx, ry, dry;
+            int lxbound = MAX(0,row - R);
+            int rxbound = MIN(X,row + R + 1);
+
+            for(x=lxbound; x<rxbound; x++) {
+                dx = row - x;
+                drx = dx - R;
+                ry = 0;
+                for(y=MIN(Y,col+ry); y<MAX(0,col-ry+1); y++) {
+                    dry = y + R - col;
+                    result[row * X + col] += ((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx][dry];
+                }
+            }
+        }
     }
     """)
     gpu_int_mask_multi_thread = mod.get_function("gpu_int_mask_multi_thread")
@@ -88,8 +113,8 @@ if __name__ == "__main__":
         np.int32(X),
         np.int32(Y),
         np.int32(R),
-        m_gpu,
         mask_gpu,
+        m_gpu,
         result_gpu,
         block=(32, 32, 1),
         grid=((X+31)//32, (X+31)//32, 1)
