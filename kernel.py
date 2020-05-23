@@ -56,13 +56,13 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 
 
 if __name__ == "__main__":
-    X, Y = 3, 3
-    R = 3
+    X, Y = 2, 2
+    R = 2
 
     # Dane CPU
-    m = np.random.randint(10, size=(X, Y))
-    mask = np.random.randint(10, size=(2*R + 1, 2*R + 1))
-    result = np.zeros([X, Y], dtype=np.int)
+    m = np.random.randint(10, size=(X, Y), dtype=np.int32)
+    mask = np.random.randint(10, size=(2*R + 1, 2*R + 1), dtype=np.int32)
+    result = np.zeros([X, Y], dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
     start = cuda.Event()
@@ -71,30 +71,34 @@ if __name__ == "__main__":
     """
     Każdy wątek oblicza jeden element m. Czyli wątków jest X * Y.
     Każdy wątek oblicza sobie dwie ostatnie pętle.
+
+    moze dodac 3x - lxbound + threadId.z cz cos
     """
 
     # Kernel
     mod = SourceModule("""
-    #define MAX(a,b) (a)<(b)?(b):(a)
-    #define MIN(a,b) (a)>(b)?(b):(a)
+    #define MAX(a, b) (a)<(b)?(b):(a)
+    #define MIN(a, b) (a)>(b)?(b):(a)
 
-    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int** mask, int* m, int* result)
+    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int *mask, const int *m, int *result)
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
         int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
 
         if ((row < X) && (col < Y)) {
-            int x, y, dx, drx, ry, dry;
-            int lxbound = MAX(0,row - R);
-            int rxbound = MIN(X,row + R + 1);
+            int x, y, dx, drx, ry, dry, from, to, lxbound, rxbound;
+            lxbound = MAX(0, row - R);
+            rxbound = MIN(X, row + R + 1);
 
-            for(x=lxbound; x<rxbound; x++) {
+            for(x = lxbound; x < rxbound; x++) {
                 dx = row - x;
-                drx = dx - R;
+                drx = dx + R;
                 ry = 0;
-                for(y=MIN(Y,col+ry); y<MAX(0,col-ry+1); y++) {
+                from = MIN(Y, col + ry);
+                to = MAX(0, col - ry + 1);
+                for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    result[row * X + col] += ((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx][dry];
+                    result[row * X + col] += (((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx * X + dry]);
                 }
             }
         }
@@ -106,7 +110,7 @@ if __name__ == "__main__":
     start.record()
     m_gpu = gpuarray.to_gpu(m)
     mask_gpu = gpuarray.to_gpu(mask)
-    result_gpu = gpuarray.empty((X, Y), np.int)
+    result_gpu = gpuarray.empty((X, Y), np.int32)
 
     # Wywołanie kernel'a
     gpu_int_mask_multi_thread(
@@ -126,9 +130,12 @@ if __name__ == "__main__":
     end.synchronize()
     secs = start.time_till(end)*1e-3
     print("GPU: %.7f s" % secs)
+
+    print("GPU:\n{}".format(result_gpu_kernel))
     
     # Wynik CPU
     s = time.time()
     int_mask_multi_thread(m, result, mask, X, Y, R)
     print("CPU: %.7f s" % (time.time() - s))
 
+    print("CPU:\n{}".format(result))
