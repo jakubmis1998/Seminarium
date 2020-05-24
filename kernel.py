@@ -56,13 +56,14 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 
 
 if __name__ == "__main__":
-    X, Y = 2, 2
+
+    # Rozmiary
+    X, Y = 2, 3
     R = 2
 
     # Dane CPU
     m = np.random.randint(10, size=(X, Y), dtype=np.int32)
     mask = np.random.randint(10, size=(2*R + 1, 2*R + 1), dtype=np.int32)
-    print(mask)
     result = np.zeros([X, Y], dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
@@ -70,10 +71,8 @@ if __name__ == "__main__":
     end = cuda.Event()
 
     """
-    Każdy wątek oblicza jeden element m. Czyli wątków jest X * Y.
+    Każdy wątek oblicza jeden element m - czyli wątków jest X * Y.
     Każdy wątek oblicza sobie dwie ostatnie pętle.
-
-    moze dodac 3x - lxbound + threadId.z cz cos
     """
 
     # Kernel
@@ -99,7 +98,7 @@ if __name__ == "__main__":
                 to = MAX(0, col - ry + 1);
                 for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    result[row * X + col] += (((m[row * X + col] - m[x * X + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    result[row * Y + col] += (((m[row * Y + col] - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
                 }
             }
         }
@@ -140,3 +139,5 @@ if __name__ == "__main__":
     print("CPU: %.7f s" % (time.time() - s))
 
     print("CPU:\n{}".format(result))
+
+    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
