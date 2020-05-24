@@ -58,8 +58,9 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 if __name__ == "__main__":
 
     # Rozmiary
-    X, Y = 2, 3
+    X, Y = 5, 5
     R = 2
+    print("Rozmiar: {}x{}".format(X, Y))
 
     # Dane CPU
     m = np.random.randint(10, size=(X, Y), dtype=np.int32)
@@ -130,14 +131,47 @@ if __name__ == "__main__":
     end.synchronize()
     secs = start.time_till(end)*1e-3
     print("GPU: %.7f s" % secs)
-
-    print("GPU:\n{}".format(result_gpu_kernel))
     
     # Wynik CPU
     s = time.time()
     int_mask_multi_thread(m, result, mask, X, Y, R)
     print("CPU: %.7f s" % (time.time() - s))
 
-    print("CPU:\n{}".format(result))
+    print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
-    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
+"""
+Rozmiar: 3x3
+GPU: 0.0055412 s
+CPU: 0.0006239 s
+Przyspieszenie: x 0.12
+
+Rozmiar: 8x8
+GPU: 0.0057208 s
+CPU: 0.0044630 s
+Przyspieszenie: x 0.8
+
+Rozmiar: 32x32
+GPU: 0.0029614 s
+CPU: 0.0522342 s
+Przyspieszenie: x 26
+
+Rozmiar: 128x128
+GPU: 0.0031769 s
+CPU: 0.6035192 s
+Przyspieszenie: x 201
+
+Rozmiar: 512x512
+GPU: 0.0049820 s
+CPU: 9.1069849 s
+Przyspieszenie: x 2 275
+
+Rozmiar: 1024x1024
+GPU: 0.0108610 s
+CPU: 35.0254512 s
+Przyspieszenie: x 3 501
+
+Rozmiar: 4096x4096
+GPU: 0.0550061 s
+CPU: 566.6825511 s
+Przyspieszenie: x 11 333
+"""
