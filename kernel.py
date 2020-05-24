@@ -58,7 +58,11 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 if __name__ == "__main__":
 
     # Rozmiary
+<<<<<<< HEAD
     X, Y = 5, 5
+=======
+    X, Y = 4096, 4096
+>>>>>>> ffb1f8cb931272aed1aaeae52f09f8e6b8e51d42
     R = 2
     print("Rozmiar: {}x{}".format(X, Y))
 
@@ -174,4 +178,3 @@ Rozmiar: 4096x4096
 GPU: 0.0550061 s
 CPU: 566.6825511 s
 Przyspieszenie: x 11 333
-"""
