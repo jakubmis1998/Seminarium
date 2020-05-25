@@ -37,8 +37,8 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
     mask - macierz wag 2R+1 x 2R+1
     R - promien otoczenia
     """
-    pola = np.empty([X, Y], dtype=np.int)
-    half_ring = None  # tu bedzie jakis obiekt
+    # pola = np.empty([X, Y], dtype=np.int)
+    # half_ring = None  # tu bedzie jakis obiekt
     
     for x0 in range(X):
         lxbound = max(0, x0 - R)
@@ -51,7 +51,7 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
                 # Zamieniam sobie miejscami max i min, bo tu zawsze lewa > prawa i nie wykonuje sie nigdy petla
                 for y in range(min(Y, y0 + ry), max(0, y0 - ry + 1)):
                     dry = y + R - y0
-                    pola[x0][y0] += mask[drx][dry]
+                    # pola[x0][y0] += mask[drx][dry]
                     # 0 jeśli m[x0][y0] > m[x][y], else -1
                     result[x0][y0] += ((m[x0][y0] - m[x][y]) >> 31) * mask[drx][dry]
 
@@ -59,7 +59,7 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 if __name__ == "__main__":
 
     # Rozmiary
-    X, Y = 5, 5
+    X, Y = 4096, 4096
     R = 2
     print("Rozmiar: {}x{}".format(X, Y))
 
@@ -133,42 +133,46 @@ if __name__ == "__main__":
     # Wynik CPU
     s = time.time()
     int_mask_multi_thread(m, result, mask, X, Y, R)
-    print("CPU: %.7f s" % (time.time() - s))
+    e = time.time() - s
+    print("CPU: %.7f s" % e)
 
-    print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
+    print("Przyspieszenie: x %.2f" % (e / secs))
+
+    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
 """
 Rozmiar: 3x3
-GPU: 0.0055412 s
-CPU: 0.0006239 s
-Przyspieszenie: x 0.12
+GPU: 0.0029615 s
+CPU: 0.0005479 s
+Przyspieszenie: x 0.18
 
 Rozmiar: 8x8
-GPU: 0.0057208 s
-CPU: 0.0044630 s
-Przyspieszenie: x 0.8
+GPU: 0.0030379 s
+CPU: 0.0043349 s
+Przyspieszenie: x 1.43
 
 Rozmiar: 32x32
-GPU: 0.0029614 s
-CPU: 0.0522342 s
-Przyspieszenie: x 26
+GPU: 0.0025339 s
+CPU: 0.0515258 s
+Przyspieszenie: x 25.50
 
 Rozmiar: 128x128
-GPU: 0.0031769 s
-CPU: 0.6035192 s
-Przyspieszenie: x 201
+GPU: 0.0046817 s
+CPU: 0.5255759 s
+Przyspieszenie: x 131.38
 
 Rozmiar: 512x512
-GPU: 0.0049820 s
-CPU: 9.1069849 s
-Przyspieszenie: x 2 275
+GPU: 0.0070015 s
+CPU: 7.8603940 s
+Przyspieszenie: x 1122.86
 
 Rozmiar: 1024x1024
-GPU: 0.0108610 s
-CPU: 35.0254512 s
-Przyspieszenie: x 3 501
+GPU: 0.0084219 s
+CPU: 36.8409948 s
+Przyspieszenie: x 4605.00
 
 Rozmiar: 4096x4096
-GPU: 0.0550061 s
-CPU: 566.6825511 s
-Przyspieszenie: x 11 333
+GPU: 0.0544873 s
+CPU: 580.9967351 s
+Przyspieszenie: x 11619.80
+"""
