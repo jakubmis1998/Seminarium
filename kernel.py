@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# Przykładowa funkcja
 """public static void intMaskMultiThread(int[][] m, int[][] result, int[][] mask, int X, int Y, int R) {
     int[][] pola = new int[X][Y];
     Ring halfRing = new Ring(R);
