@@ -135,7 +135,7 @@ if __name__ == "__main__":
     int_mask_multi_thread(m, result, mask, X, Y, R)
     e = time.time() - s
     print("CPU: %.7f s" % e)
-
+    
     # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
 """
@@ -173,6 +173,7 @@ Rozmiar: 4096x4096
 GPU: 0.0544873 s
 CPU: 580.9967351 s
 Przyspieszenie: x 11619.80
+<<<<<<< HEAD
 
 Rozmiar: 8192x8192
 GPU: 0.2312603 s
