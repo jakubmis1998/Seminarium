@@ -58,11 +58,7 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
 if __name__ == "__main__":
 
     # Rozmiary
-<<<<<<< HEAD
     X, Y = 5, 5
-=======
-    X, Y = 4096, 4096
->>>>>>> ffb1f8cb931272aed1aaeae52f09f8e6b8e51d42
     R = 2
     print("Rozmiar: {}x{}".format(X, Y))
 
@@ -75,12 +71,9 @@ if __name__ == "__main__":
     start = cuda.Event()
     end = cuda.Event()
 
-    """
-    Każdy wątek oblicza jeden element m - czyli wątków jest X * Y.
-    Każdy wątek oblicza sobie dwie ostatnie pętle.
-    """
-
     # Kernel
+    # Każdy wątek oblicza jeden element m - czyli wątków jest X * Y.
+    # Każdy wątek oblicza sobie dwie ostatnie pętle.
     mod = SourceModule("""
     #define MAX(a, b) (a)<(b)?(b):(a)
     #define MIN(a, b) (a)>(b)?(b):(a)
