@@ -16,6 +16,7 @@
                 IntStream.range(Math.max(0, y0 - ry + 1), Math.min(Y, y0 + ry)).forEach(y -> {
                     pola[x0][y0]++;
                     final int dry = y + R - y0;
+                    /* Sugerowana zmiana zmiana += na -= */
                     result[x0][y0] += ((m[x0][y0] - m[x][y]) >> 31) * mask[dRx][dry];
                 });
             });
@@ -38,7 +39,7 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
     R - promien otoczenia
     """
     # pola = np.empty([X, Y], dtype=np.int)
-    # half_ring = None  # tu bedzie jakis obiekt
+    # half_ring = None  # Obiekt
     
     for x0 in range(X):
         lxbound = max(0, x0 - R)
@@ -47,19 +48,20 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
             for x in range(lxbound, rxbound):
                 dx = x0 - x
                 drx = dx + R
-                ry = 0  # tu bedzie jakas liczba
-                # Zamieniam sobie miejscami max i min, bo tu zawsze lewa > prawa i nie wykonuje sie nigdy petla
-                for y in range(min(Y, y0 + ry), max(0, y0 - ry + 1)):
+                ry = R  # tymczasowo R - po kwadracie, docelowo - getHalfRing(dx)
+                for y in range(max(0, y0 - ry + 1), min(Y, y0 + ry)):
                     dry = y + R - y0
                     # pola[x0][y0] += mask[drx][dry]
-                    # 0 jeśli m[x0][y0] > m[x][y], else -1
-                    result[x0][y0] += ((m[x0][y0] - m[x][y]) >> 31) * mask[drx][dry]
+                    # 0 jeśli m[x0][y0] > m[x][y], else -1 - Zamienione += na -=
+                    result[x0][y0] -= ((m[x0][y0] - m[x][y]) >> 31) * mask[drx][dry]
 
 
 if __name__ == "__main__":
 
     # Rozmiary
+    # Minimalnie 400 x 400
     X, Y = 8, 8
+    # Minimalnie 50
     R = 2
     print("Rozmiar: {}x{}".format(X, Y))
 
@@ -92,12 +94,12 @@ if __name__ == "__main__":
             for(x = lxbound; x < rxbound; x++) {
                 dx = row - x;
                 drx = dx + R;
-                ry = 0;
-                from = MIN(Y, col + ry);
-                to = MAX(0, col - ry + 1);
+                ry = R;
+                from = MAX(0, col - ry + 1);
+                to = MIN(Y, col + ry);
                 for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    result[row * Y + col] += (((m[row * Y + col] - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    result[row * Y + col] -= (((m[row * Y + col] - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
                 }
             }
         }
