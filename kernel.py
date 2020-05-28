@@ -24,17 +24,26 @@
     });
 }"""
 
+# PyCuda
 import pycuda.driver as cuda
 import pycuda.autoinit
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
+
+# Computing
 import numpy as np
-import time
 from math import sqrt
 
+# Benchmark
+import time
+
 def get_half_ring(dx, R):
-    abs_dx = abs(dx)
-    return int(sqrt(R*R - abs_dx*abs_dx))
+    """
+    Metoda zwraca odległość od punktu dx na średnicy okręgu do górnego półokręgu.
+    Okrąg ma promień R.
+    """
+    abs_dx = abs(dx)  # abs(dx) - środek okręgu to (0, 0), dx może być ujemne lub dodatnie
+    return int(np.ceil(sqrt(R*R - abs_dx*abs_dx)))  # odległość zrzutowana na int zaokrąglona w górę.
 
 def int_mask_multi_thread(m, result, mask, X, Y, R):
     """
@@ -54,13 +63,11 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
                 dx = x0 - x
                 drx = dx + R
 
-                # 1 SPOSÓB - (R po kwadracie)
-                ry = R
+                # 1 SPOSOB - (R po kwadracie)
+                # ry = R
 
-                """
-                # 2 SPOSÓB - (getHalfRing, ry jako int)
+                # 2 SPOSOB - (getHalfRing, ry jako int zaokrąglony w górę)
                 ry = get_half_ring(dx, R)
-                """
 
                 for y in range(max(0, y0 - ry + 1), min(Y, y0 + ry)):
                     dry = y + R - y0
@@ -94,9 +101,16 @@ if __name__ == "__main__":
     #define MAX(a, b) (a)<(b)?(b):(a)
     #define MIN(a, b) (a)>(b)?(b):(a)
 
-    __device__ int my_sqrt(int x)
+    // Funkcja zwracajaca pierwiastek z liczby typu float
+    __device__ float my_sqrt(float x)
     {
-        return int(sqrt((float)x));
+        return sqrt(x);
+    }
+
+    __device__ int getHalfRing(int R, int dx)
+    {
+        int abs_dx = abs(dx);
+        return int(ceil(my_sqrt(R*R - abs_dx*abs_dx)));
     }
 
     __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int *mask, const int *m, int *result)
@@ -114,14 +128,11 @@ if __name__ == "__main__":
                 drx = dx + R;
 
                 // 1 SPOSOB (R - liczone po kwadracie)
-                ry = R;
-
-                /*
+                //ry = R;
+                
                 // 2 SPOSOB (getHalfRing, ry jako int)
-                int abs_dx = abs(dx);
-                ry = my_sqrt(R*R - abs_dx*abs_dx);
-                */
-
+                ry = getHalfRing(R, dx);
+                
                 from = MAX(0, col - ry + 1);
                 to = MIN(Y, col + ry);
                 for(y = from; y < to; y++) {
@@ -164,8 +175,8 @@ if __name__ == "__main__":
     int_mask_multi_thread(m, result, mask, X, Y, R)
     e = time.time() - s
     print("CPU: %.7f s" % e)
-    
-    print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
+
+    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
 """
 Rozmiar: 3x3
