@@ -30,6 +30,11 @@ import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 import numpy as np
 import time
+from math import sqrt
+
+def get_half_ring(dx, R):
+    abs_dx = abs(dx)
+    return int(sqrt(R*R - abs_dx*abs_dx))
 
 def int_mask_multi_thread(m, result, mask, X, Y, R):
     """
@@ -48,7 +53,15 @@ def int_mask_multi_thread(m, result, mask, X, Y, R):
             for x in range(lxbound, rxbound):
                 dx = x0 - x
                 drx = dx + R
-                ry = R  # tymczasowo R - po kwadracie, docelowo - getHalfRing(dx)
+
+                # 1 SPOSÓB - (R po kwadracie)
+                ry = R
+
+                """
+                # 2 SPOSÓB - (getHalfRing, ry jako int)
+                ry = get_half_ring(dx, R)
+                """
+
                 for y in range(max(0, y0 - ry + 1), min(Y, y0 + ry)):
                     dry = y + R - y0
                     # pola[x0][y0] += mask[drx][dry]
@@ -81,20 +94,34 @@ if __name__ == "__main__":
     #define MAX(a, b) (a)<(b)?(b):(a)
     #define MIN(a, b) (a)>(b)?(b):(a)
 
+    __device__ int my_sqrt(int x)
+    {
+        return int(sqrt((float)x));
+    }
+
     __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int *mask, const int *m, int *result)
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
         int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
 
         if ((row < X) && (col < Y)) {
-            int x, y, dx, drx, ry, dry, from, to, lxbound, rxbound;
+            int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
             lxbound = MAX(0, row - R);
             rxbound = MIN(X, row + R + 1);
 
             for(x = lxbound; x < rxbound; x++) {
                 dx = row - x;
                 drx = dx + R;
+
+                // 1 SPOSOB (R - liczone po kwadracie)
                 ry = R;
+
+                /*
+                // 2 SPOSOB (getHalfRing, ry jako int)
+                int abs_dx = abs(dx);
+                ry = my_sqrt(R*R - abs_dx*abs_dx);
+                */
+
                 from = MAX(0, col - ry + 1);
                 to = MIN(Y, col + ry);
                 for(y = from; y < to; y++) {
@@ -138,7 +165,7 @@ if __name__ == "__main__":
     e = time.time() - s
     print("CPU: %.7f s" % e)
     
-    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
+    print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
 """
 Rozmiar: 3x3
