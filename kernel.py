@@ -173,10 +173,4 @@ Rozmiar: 4096x4096
 GPU: 0.0544873 s
 CPU: 580.9967351 s
 Przyspieszenie: x 11619.80
-<<<<<<< HEAD
-
-Rozmiar: 8192x8192
-GPU: 0.2312603 s
-CPU: 1992.8171010 s
-Przyspieszenie: x 11619.80
 """
