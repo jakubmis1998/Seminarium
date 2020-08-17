@@ -1,5 +1,4 @@
 import numpy
-from numpy.linalg import norm
 import reikna.cluda as cluda
 from reikna.linalg import MatrixMul
 import time

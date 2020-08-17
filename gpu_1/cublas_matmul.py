@@ -7,7 +7,7 @@ import skcuda.cublas as cublas
 
 start = cuda.Event()
 end = cuda.Event()
-N = 1024
+N = 4096
 print("N = {}".format(N))
 
 a = np.random.randn(N, N).astype(np.float32)
