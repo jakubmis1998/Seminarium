@@ -1,2 +1,3 @@
 *.hdf5
-DRF/venv/*
+BACKEND/venv/*
+*__pycache__*

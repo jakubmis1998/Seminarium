@@ -1,6 +1,4 @@
 django
 djangorestframework
 django-cors-headers
-wheel
-pycuda
 numpy

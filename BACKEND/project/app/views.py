@@ -1,13 +1,11 @@
 from django.contrib.auth.models import User
-from rest_framework import viewsets
-from rest_framework import permissions
+from rest_framework import viewsets, permissions, status, viewsets
 from rest_framework.response import Response
-from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view
-
+ 
 from .serializers import UserSerializer, PersonSerializer
 from .models import Person
-
+ 
 import numpy as np
 
 # GPU
@@ -15,7 +13,6 @@ import numpy as np
 # import pycuda.autoinit
 # import pycuda.gpuarray as gpuarray
 # from pycuda.compiler import SourceModule
-import numpy as np
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -24,7 +21,7 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
-
+ 
 class PersonViewSet(viewsets.ModelViewSet):
     """
     API endpoint that allows users to be viewed or edited.
@@ -32,7 +29,7 @@ class PersonViewSet(viewsets.ModelViewSet):
     queryset = Person.objects.all()
     serializer_class = PersonSerializer
     ordering_fields = '__all__'
-
+ 
 @api_view(['GET', 'POST'])
 def calculate(request):
     """
