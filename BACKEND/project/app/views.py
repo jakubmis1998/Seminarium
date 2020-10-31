@@ -3,8 +3,9 @@ from rest_framework import viewsets, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
 from django.http import FileResponse, HttpResponse
-import io
-import json
+import io, os, json
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
  
 from .serializers import UserSerializer, PersonSerializer
 from .models import Person
@@ -32,7 +33,7 @@ class PersonViewSet(viewsets.ModelViewSet):
     ordering_fields = '__all__'
  
 @api_view(['GET', 'POST'])
-def calculate(request):
+def example(request):
     if request.method == 'POST':
         print("POST")
         A = np.array(request.data["a"], dtype=np.int32)
@@ -42,20 +43,37 @@ def calculate(request):
         print("GET")
         return Response({'result': 2}, status=status.HTTP_200_OK)
 
+
 @api_view(['POST'])
-def image_processing(request):
+def read_and_return(request):
     if request.method == 'POST':
-        print("DOSTALEM")
-        # tifffile.imwrite('tmp.tif', request.data["image"])
-        # img = tifffile.imread('tmp.tif')
-        # print(img.shape)
-        print(request.data)
+        print("Reading TIFF file")
         response = FileResponse(
             io.BytesIO(request.data["image"].read()),
             as_attachment=True
         )
+
         response["Content-Type"] = 'multipart/form-data'
         response.status_code = status.HTTP_200_OK
+        print("Return response with file\n\n")
         return response
 
-        # return Response({'result': 1}, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+def image_processing(request):
+    if request.method == 'POST':
+
+        print("Reading TIFF file")
+        path = default_storage.save("plik.tif", ContentFile(request.data["image"].read()))
+        print("Saved on disk")
+
+        img = tifffile.imread('plik.tif')
+        os.remove('plik.tif')
+        print("Removed from disk")
+
+        response = HttpResponse(json.dumps({'shape': img.shape}))
+        response["Content-Type"] = 'application/json'
+        response.status_code = status.HTTP_200_OK
+        print("Return shape\n\n")
+
+        return response
