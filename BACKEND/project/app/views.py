@@ -2,8 +2,9 @@ from django.contrib.auth.models import User
 from rest_framework import viewsets, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
 import io
+import json
  
 from .serializers import UserSerializer, PersonSerializer
 from .models import Person
@@ -45,17 +46,16 @@ def calculate(request):
 def image_processing(request):
     if request.method == 'POST':
         print("DOSTALEM")
-        print(request.data)
-        # tifffile.imwrite('tmp.tif', request.data['image'])
+        # tifffile.imwrite('tmp.tif', request.data["image"])
         # img = tifffile.imread('tmp.tif')
         # print(img.shape)
+        print(request.data)
         response = FileResponse(
-            io.BytesIO(request.data['image'].read()),
-            as_attachment=True,
-            filename="somefilename.tif"
+            io.BytesIO(request.data["image"].read()),
+            as_attachment=True
         )
         response["Content-Type"] = 'multipart/form-data'
-
+        response.status_code = status.HTTP_200_OK
         return response
 
         # return Response({'result': 1}, status=status.HTTP_200_OK)
