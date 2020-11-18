@@ -12,6 +12,7 @@ from .models import Person
  
 import numpy as np
 import tifffile
+import psutil
 
 # GPU
 # import pycuda.driver as cuda
@@ -46,17 +47,17 @@ def example(request):
 
 @api_view(['POST'])
 def read_and_return(request):
-    if request.method == 'POST':
-        print("Reading TIFF file")
-        response = FileResponse(
-            io.BytesIO(request.data["image"].read()),
-            as_attachment=True
-        )
+    print("Reading TIFF file")
+    response = FileResponse(
+        io.BytesIO(request.data["image"].read()),
+        as_attachment=True
+    )
+    print(request.data)
 
-        response["Content-Type"] = 'multipart/form-data'
-        response.status_code = status.HTTP_200_OK
-        print("Return response with file\n\n")
-        return response
+    response["Content-Type"] = 'multipart/form-data'
+    response.status_code = status.HTTP_200_OK
+    print("Return response with file\n\n")
+    return response
 
 
 @api_view(['POST'])
@@ -77,3 +78,16 @@ def image_processing(request):
         print("Return shape\n\n")
 
         return response
+
+@api_view(['GET'])
+def system_usage(request):
+    print("READ SYSTEM USAGE")
+    response = HttpResponse(json.dumps({
+        'cpu_count': psutil.cpu_count(),
+        'ram_usage': dict(psutil.virtual_memory()._asdict()),
+        'cpu_usage': psutil.cpu_percent(percpu = True)
+    }))
+    response["Content-Type"] = 'application/json'
+    response.status_code = status.HTTP_200_OK
+    print("RETURN SYSTEM USAGE")
+    return response

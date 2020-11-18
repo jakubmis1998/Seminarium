@@ -14,4 +14,5 @@ urlpatterns = [
     path('example/', views.example),
     path('read_and_return/', views.read_and_return),
     path('image_processing/', views.image_processing),
+    path('system_usage/', views.system_usage),
 ]
