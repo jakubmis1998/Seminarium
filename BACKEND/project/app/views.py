@@ -9,16 +9,21 @@ from django.core.files.storage import default_storage
  
 from .serializers import UserSerializer, PersonSerializer
 from .models import Person
- 
+
+# PyCuda
+import pycuda.driver as cuda
+import pycuda.autoinit
+import pycuda.gpuarray as gpuarray
+from pycuda.compiler import SourceModule
+
+# Computing
 import numpy as np
+from math import sqrt
 import tifffile
 import psutil
 
-# GPU
-# import pycuda.driver as cuda
-# import pycuda.autoinit
-# import pycuda.gpuarray as gpuarray
-# from pycuda.compiler import SourceModule
+# Benchmark
+import time
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -52,7 +57,6 @@ def read_and_return(request):
         io.BytesIO(request.data["image"].read()),
         as_attachment=True
     )
-    print(request.data)
 
     response["Content-Type"] = 'multipart/form-data'
     response.status_code = status.HTTP_200_OK
@@ -91,3 +95,127 @@ def system_usage(request):
     response.status_code = status.HTTP_200_OK
     print("RETURN SYSTEM USAGE")
     return response
+
+@api_view(['POST'])
+def kernel(request):
+    cuda.init()
+    device = cuda.Device(0)
+    ctx = device.make_context()
+
+    # Kernel
+    # Każdy wątek oblicza jeden element result z m - czyli wątków jest X * Y.
+    # Każdy wątek oblicza sobie dwie ostatnie pętle.
+    mod = SourceModule("""
+    #define MAX(a, b) (a)<(b)?(b):(a)
+    #define MIN(a, b) (a)>(b)?(b):(a)
+    // Funkcja zwracajaca pierwiastek z liczby typu float
+    __device__ float my_sqrt(float x)
+    {
+        return sqrt(x);
+    }
+    __device__ int getHalfRing(int R, int dx)
+    {
+        int abs_dx = abs(dx);
+        return int(ceil(my_sqrt(R*R - abs_dx*abs_dx)));
+    }
+    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int *mask, const int *m, int *result)
+    {
+        int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
+        int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
+        if ((row < X) && (col < Y)) {
+            int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
+            lxbound = MAX(0, row - R);
+            rxbound = MIN(X, row + R + 1);
+            for(x = lxbound; x < rxbound; x++) {
+                dx = row - x;
+                drx = dx + R;
+                // 1 SPOSOB (R - liczone po kwadracie)
+                //ry = R;
+
+                // 2 SPOSOB (getHalfRing, ry jako int)
+                ry = getHalfRing(R, dx);
+
+                from = MAX(0, col - ry + 1);
+                to = MIN(Y, col + ry);
+                for(y = from; y < to; y++) {
+                    dry = y + R - col;
+                    result[row * Y + col] -= (((m[row * Y + col] - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                }
+            }
+        }
+    }
+    """)
+    gpu_int_mask_multi_thread = mod.get_function("gpu_int_mask_multi_thread")
+
+    # Get parameters from request data
+    parameters = json.loads(request.data["parameters"])
+    filename = parameters["filename"]
+    method = parameters["method"]
+    X = parameters["X"]
+    Y = parameters["Y"]
+
+    # Save image and load to tifffile, then remove from disk
+    path = default_storage.save(filename, ContentFile(request.data["image"].read()))
+    img = tifffile.imread(filename)
+    os.remove(filename)
+
+    R = parameters["parameters"][0]["R"]
+    T = parameters["parameters"][0]["T"]
+    print(img.shape)
+    print(R, T, X, Y)
+
+    m = img[0]
+    # m = np.random.randint(0, 255, (256, 256, 3), 'uint8')
+    mask = np.random.randint(2, size=(2*R + 1, 2*R + 1), dtype=np.int32)
+    result = np.zeros([X, Y], dtype=np.int32)
+
+    # Zmienne do pomiaru czasu na GPU
+    start = cuda.Event()
+    end = cuda.Event()
+
+    # # Dane GPU
+    start.record()
+    m_gpu = gpuarray.to_gpu(m)
+    mask_gpu = gpuarray.to_gpu(mask)
+    result_gpu = gpuarray.empty((X, Y), np.int32)
+
+    # # Wywołanie kernel'a
+    gpu_int_mask_multi_thread(
+        np.int32(X),
+        np.int32(Y),
+        np.int32(R),
+        mask_gpu,
+        m_gpu,
+        result_gpu,
+        block=(32, 32, 1),
+        grid=((X+31)//32, (X+31)//32, 1)
+    )
+
+    # # Wynik GPU
+    result_gpu_kernel = result_gpu.get()
+    end.record()
+    end.synchronize()
+    secs = start.time_till(end)*1e-3
+    print("GPU: %.7f s" % secs)
+
+    ctx.pop()
+
+    # Zapisanie przerobionego pliku na dysk
+    tifffile.imwrite('processed.tiff', result_gpu_kernel.astype('uint8'))
+    # Odczytanie go w formie binarnej
+    with open('processed.tiff', 'rb') as fp:
+        data = fp.read()
+    os.remove('processed.tiff')
+    # Zwrocenie na front
+    response = FileResponse(
+        io.BytesIO(data),
+        as_attachment=True
+    )
+    response["Content-Type"] = 'multipart/form-data'
+    response.status_code = status.HTTP_200_OK
+    return response
+    # return Response({
+        # "result": result_gpu_kernel,
+        # "time": secs,
+        # "shape": img.shape
+    # }, status=status.HTTP_200_OK)
