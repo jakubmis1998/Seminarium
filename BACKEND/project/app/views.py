@@ -97,7 +97,7 @@ def system_usage(request):
     return response
 
 @api_view(['POST'])
-def kernel(request):
+def kernel_processing(request):
     cuda.init()
     device = cuda.Device(0)
     ctx = device.make_context()
