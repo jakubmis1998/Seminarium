@@ -122,8 +122,8 @@ def kernel_processing(request):
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
         int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
+        int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
         if ((row < X) && (col < Y)) {
-            int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
             lxbound = MAX(0, row - R);
             rxbound = MIN(X, row + R + 1);
             for(x = lxbound; x < rxbound; x++) {
@@ -151,23 +151,27 @@ def kernel_processing(request):
     parameters = json.loads(request.data["parameters"])
     filename = parameters["filename"]
     method = parameters["method"]
-    X = parameters["X"]
-    Y = parameters["Y"]
+    X = int(parameters["X"])
+    Y = int(parameters["Y"])
 
     # Save image and load to tifffile, then remove from disk
     path = default_storage.save(filename, ContentFile(request.data["image"].read()))
     img = tifffile.imread(filename)
     os.remove(filename)
 
-    R = parameters["parameters"][0]["R"]
-    T = parameters["parameters"][0]["T"]
-    print(img.shape)
+    R = int(parameters["parameters"][0]["R"])
+    T = int(parameters["parameters"][0]["T"])
+    # print(img)
     print(R, T, X, Y)
-
-    m = img[0]
-    # m = np.random.randint(0, 255, (256, 256, 3), 'uint8')
+    b = np.zeros((Y, X, 4), dtype=np.int8)
+    for i in range(Y):
+        for j in range(X):
+            b[i][j] = np.array([img[0][i][j], 0, 0, 255], dtype=np.int32)
+    m = np.copy(b)
+    print(m.shape)
+    print(m)
     mask = np.random.randint(2, size=(2*R + 1, 2*R + 1), dtype=np.int32)
-    result = np.zeros([X, Y], dtype=np.int32)
+    result = np.zeros((Y, X), dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
     start = cuda.Event()
@@ -177,7 +181,7 @@ def kernel_processing(request):
     start.record()
     m_gpu = gpuarray.to_gpu(m)
     mask_gpu = gpuarray.to_gpu(mask)
-    result_gpu = gpuarray.empty((X, Y), np.int32)
+    result_gpu = gpuarray.empty((Y, X), dtype=np.int32)
 
     # # Wywołanie kernel'a
     gpu_int_mask_multi_thread(
@@ -200,6 +204,7 @@ def kernel_processing(request):
 
     ctx.pop()
 
+    print(result_gpu_kernel.astype('uint8'))
     # Zapisanie przerobionego pliku na dysk
     tifffile.imwrite('processed.tiff', result_gpu_kernel.astype('uint8'))
     # Odczytanie go w formie binarnej
