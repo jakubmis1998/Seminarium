@@ -151,6 +151,7 @@ def kernel_processing(request):
     parameters = json.loads(request.data["parameters"])
     filename = parameters["filename"]
     method = parameters["method"]
+    depth = int(parameters["depth"])
     X = int(parameters["X"])
     Y = int(parameters["Y"])
 
@@ -161,15 +162,22 @@ def kernel_processing(request):
 
     R = int(parameters["parameters"][0]["R"])
     T = int(parameters["parameters"][0]["T"])
-    # print(img)
     print(R, T, X, Y)
-    b = np.zeros((Y, X, 4), dtype=np.int8)
+
+    if depth == 8:
+        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int8)
+    elif depth == 16:
+        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int16)
+    elif depth == 32:
+        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int32)
+    elif depth == 64:
+        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int64)
+
     for i in range(Y):
         for j in range(X):
-            b[i][j] = np.array([img[0][i][j], 0, 0, 255], dtype=np.int32)
-    m = np.copy(b)
-    print(m.shape)
-    print(m)
+            # First page - [0]
+            m_with_rgba_canals[i][j] = np.array([img[0][i][j], 0, 0, 255])
+
     mask = np.random.randint(2, size=(2*R + 1, 2*R + 1), dtype=np.int32)
     result = np.zeros((Y, X), dtype=np.int32)
 
@@ -179,7 +187,7 @@ def kernel_processing(request):
 
     # # Dane GPU
     start.record()
-    m_gpu = gpuarray.to_gpu(m)
+    m_gpu = gpuarray.to_gpu(m_with_rgba_canals)
     mask_gpu = gpuarray.to_gpu(mask)
     result_gpu = gpuarray.empty((Y, X), dtype=np.int32)
 
@@ -204,7 +212,6 @@ def kernel_processing(request):
 
     ctx.pop()
 
-    print(result_gpu_kernel.astype('uint8'))
     # Zapisanie przerobionego pliku na dysk
     tifffile.imwrite('processed.tiff', result_gpu_kernel.astype('uint8'))
     # Odczytanie go w formie binarnej
