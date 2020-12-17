@@ -148,20 +148,20 @@ def kernel_processing(request):
     gpu_int_mask_multi_thread = mod.get_function("gpu_int_mask_multi_thread")
 
     # Get parameters from request data
-    parameters = json.loads(request.data["parameters"])
-    filename = parameters["filename"]
-    method = parameters["method"]
-    depth = int(parameters["depth"])
-    X = int(parameters["X"])
-    Y = int(parameters["Y"])
+    parameters = json.loads(request.data.get("processing_info"))
+    filename = parameters.get("filename")
+    method = parameters.get("method")
+    depth = int(parameters.get("depth"))
+    X = int(parameters.get("X"))
+    Y = int(parameters.get("Y"))
 
     # Save image and load to tifffile, then remove from disk
     path = default_storage.save(filename, ContentFile(request.data["image"].read()))
     img = tifffile.imread(filename)
     os.remove(filename)
 
-    R = int(parameters["parameters"][0]["R"])
-    T = int(parameters["parameters"][0]["T"])
+    R = int(parameters.get("switches")[0]["R"])
+    T = int(parameters.get("switches")[0]["T"])
     print(R, T, X, Y)
 
     if depth == 8:
@@ -210,7 +210,7 @@ def kernel_processing(request):
     secs = start.time_till(end)*1e-3
     print("GPU: %.7f s" % secs)
 
-    ctx.pop()
+    # ctx.pop()
 
     # Zapisanie przerobionego pliku na dysk
     tifffile.imwrite('processed.tiff', result_gpu_kernel.astype('uint8'))
