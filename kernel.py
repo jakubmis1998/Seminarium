@@ -80,9 +80,9 @@ if __name__ == "__main__":
 
     # Rozmiary
     # Minimalnie 400 x 400
-    X, Y = 30, 30
+    X, Y = 5000, 5000
     # Minimalnie 50
-    R = 5
+    R = 200
     print("Rozmiar: {}x{}".format(X, Y))
 
     # Dane CPU
@@ -171,12 +171,12 @@ if __name__ == "__main__":
     print("GPU: %.7f s" % secs)
     
     # Wynik CPU
-    s = time.time()
-    int_mask_multi_thread(m, result, mask, X, Y, R)
-    e = time.time() - s
-    print("CPU: %.7f s" % e)
+    # s = time.time()
+    # int_mask_multi_thread(m, result, mask, X, Y, R)
+    # e = time.time() - s
+    # print("CPU: %.7f s" % e)
     
-    print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
+    # print("Computation error:\n {}".format(abs(np.subtract(result_gpu_kernel, result))))
 
 """
 Rozmiar: 3x3

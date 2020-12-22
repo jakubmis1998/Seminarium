@@ -118,14 +118,16 @@ def kernel_processing(request):
         int abs_dx = abs(dx);
         return int(ceil(my_sqrt(R*R - abs_dx*abs_dx)));
     }
-    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int *mask, const int *m, int *result)
+    __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int T, const int *mask, const int *m, int *result)
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
         int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
-        int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
+        int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound, p, c;
         if ((row < X) && (col < Y)) {
             lxbound = MAX(0, row - R);
             rxbound = MIN(X, row + R + 1);
+            p = 0;
+            c = 0;
             for(x = lxbound; x < rxbound; x++) {
                 dx = row - x;
                 drx = dx + R;
@@ -139,9 +141,13 @@ def kernel_processing(request):
                 to = MIN(Y, col + ry);
                 for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    result[row * Y + col] -= (((m[row * Y + col] - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    p += mask[drx * (2*R+1) + dry];
+                    c -= ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    // result[row * Y + col] -= ((((m[row * Y + col] + T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    // result[row * Y + col] = m[row * Y + col];
                 }
             }
+            result[row * Y + col] = (256 * c) / p;
         }
     }
     """)
@@ -151,74 +157,67 @@ def kernel_processing(request):
     parameters = json.loads(request.data.get("processing_info"))
     filename = parameters.get("filename")
     method = parameters.get("method")
-    depth = int(parameters.get("depth"))
+    pages = parameters.get("pages")
+    # depth = int(parameters.get("depth"))
     X = int(parameters.get("X"))
     Y = int(parameters.get("Y"))
+    R = int(parameters.get("switches")[0]["R"])
+    T = int(parameters.get("switches")[0]["T"])
 
     # Save image and load to tifffile, then remove from disk
     path = default_storage.save(filename, ContentFile(request.data["image"].read()))
     img = tifffile.imread(filename)
     os.remove(filename)
 
-    R = int(parameters.get("switches")[0]["R"])
-    T = int(parameters.get("switches")[0]["T"])
-    print(R, T, X, Y)
-
-    if depth == 8:
-        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int8)
-    elif depth == 16:
-        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int16)
-    elif depth == 32:
-        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int32)
-    elif depth == 64:
-        m_with_rgba_canals = np.zeros((Y, X, 4), dtype=np.int64)
-
-    for i in range(Y):
-        for j in range(X):
-            # First page - [0]
-            m_with_rgba_canals[i][j] = np.array([img[0][i][j], 0, 0, 255])
-
-    mask = np.random.randint(2, size=(2*R + 1, 2*R + 1), dtype=np.int32)
+    # Mask and result array
+    mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2*R+1)] for j in range(2*R + 1)]
+    mask = np.array(mask, dtype=np.int32)
     result = np.zeros((Y, X), dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
     start = cuda.Event()
     end = cuda.Event()
 
-    # # Dane GPU
-    start.record()
-    m_gpu = gpuarray.to_gpu(m_with_rgba_canals)
-    mask_gpu = gpuarray.to_gpu(mask)
-    result_gpu = gpuarray.empty((Y, X), dtype=np.int32)
+    for page in range(pages):
 
-    # # Wywołanie kernel'a
-    gpu_int_mask_multi_thread(
-        np.int32(X),
-        np.int32(Y),
-        np.int32(R),
-        mask_gpu,
-        m_gpu,
-        result_gpu,
-        block=(32, 32, 1),
-        grid=((X+31)//32, (X+31)//32, 1)
-    )
+        # # Dane GPU
+        start.record()
+        m_gpu = gpuarray.to_gpu(img[page].astype(np.int32))
+        mask_gpu = gpuarray.to_gpu(mask)
+        result_gpu = gpuarray.empty((Y, X), dtype=np.int32)
 
-    # # Wynik GPU
-    result_gpu_kernel = result_gpu.get()
-    end.record()
-    end.synchronize()
-    secs = start.time_till(end)*1e-3
-    print("GPU: %.7f s" % secs)
+        # # Wywołanie kernel'a
+        gpu_int_mask_multi_thread(
+            np.int32(X),
+            np.int32(Y),
+            np.int32(R),
+            np.int32(T),
+            mask_gpu,
+            m_gpu,
+            result_gpu,
+            block=(32, 32, 1),
+            grid=((X+31)//32, (X+31)//32, 1)
+        )
 
-    # ctx.pop()
+        # # Wynik GPU
+        result_gpu_kernel = result_gpu.get()
+        end.record()
+        end.synchronize()
+        secs = start.time_till(end)*1e-3
+        print(f"Page {page + 1}: %.7f s" % secs)
 
-    # Zapisanie przerobionego pliku na dysk
-    tifffile.imwrite('processed.tiff', result_gpu_kernel.astype('uint8'))
-    # Odczytanie go w formie binarnej
-    with open('processed.tiff', 'rb') as fp:
-        data = fp.read()
-    os.remove('processed.tiff')
+        tmp_name = f"processed_tif.tif"
+        # Zapisanie przerobionego pliku na dysk
+        tifffile.imwrite(tmp_name, result_gpu_kernel.astype(img.dtype), append=True)
+
     # Zwrocenie na front
+    ctx.pop()
+
+    # Odczytanie go w formie binarnej
+    with open(tmp_name, 'rb') as fp:
+        data = fp.read()
+    os.remove(tmp_name)
+
     response = FileResponse(
         io.BytesIO(data),
         as_attachment=True
