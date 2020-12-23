@@ -141,9 +141,20 @@ def kernel_processing(request):
                 to = MIN(Y, col + ry);
                 for(y = from; y < to; y++) {
                     dry = y + R - col;
-                    p += mask[drx * (2*R+1) + dry];
-                    c -= ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
-                    // result[row * Y + col] -= ((((m[row * Y + col] + T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+
+                    // If
+                    if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
+                        p += mask[drx * (2*R+1) + dry];
+                        if (m[x * Y + y] + T <= m[row * Y + col] ) {
+                            c += mask[drx * (2*R+1) + dry];
+                        }
+                    }
+
+                    // Przesuniecie bitowe
+                    //p += mask[drx * (2*R+1) + dry];
+                    //c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                    
+                    // Przepisanie obrazka
                     // result[row * Y + col] = m[row * Y + col];
                 }
             }
@@ -158,7 +169,7 @@ def kernel_processing(request):
     filename = parameters.get("filename")
     method = parameters.get("method")
     pages = parameters.get("pages")
-    # depth = int(parameters.get("depth"))
+    # pages = 1
     X = int(parameters.get("X"))
     Y = int(parameters.get("Y"))
     R = int(parameters.get("switches")[0]["R"])
@@ -177,6 +188,7 @@ def kernel_processing(request):
     # Zmienne do pomiaru czasu na GPU
     start = cuda.Event()
     end = cuda.Event()
+    time = 0
 
     for page in range(pages):
 
@@ -204,11 +216,12 @@ def kernel_processing(request):
         end.record()
         end.synchronize()
         secs = start.time_till(end)*1e-3
-        print(f"Page {page + 1}: %.7f s" % secs)
+        time += secs
 
         tmp_name = f"processed_tif.tif"
         # Zapisanie przerobionego pliku na dysk
-        tifffile.imwrite(tmp_name, result_gpu_kernel.astype(img.dtype), append=True)
+        tab = result_gpu_kernel.astype(img.dtype)
+        tifffile.imwrite(tmp_name, tab, append=True)
 
     # Zwrocenie na front
     ctx.pop()
@@ -217,6 +230,7 @@ def kernel_processing(request):
     with open(tmp_name, 'rb') as fp:
         data = fp.read()
     os.remove(tmp_name)
+    print("time: ", time)
 
     response = FileResponse(
         io.BytesIO(data),
