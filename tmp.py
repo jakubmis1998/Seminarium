@@ -1,12 +1,10 @@
 from gpuinfo import GPUInfo
-import numpy as np
+import nvidia_smi
 
+nvidia_smi.nvmlInit()
+handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+# card id 0 hardcoded here, there is also a call to get all available card ids, so we could iterate
+
+mem_res = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+print(f'mem: {100 * (mem_res.used / mem_res.total):.3f}%') # percentage usage
 # print(GPUInfo.gpu_usage())
-
-a = np.random.randint(0, 256, (3, 5))
-b = np.empty((3, 5, 4))
-for i in range(3):
-    for j in range(5):
-        b[i][j] = np.array([a[i][j], 0, 0, 255])
-print(b)
-print(b.shape)

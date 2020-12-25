@@ -5,3 +5,4 @@ numpy
 tifffile
 psutil
 pycuda
+nvidia-ml-py3
