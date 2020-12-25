@@ -21,9 +21,16 @@ import numpy as np
 from math import sqrt
 import tifffile
 import psutil
+import nvidia_smi
 
 # Benchmark
 import time
+
+nvidia_smi.nvmlInit()
+handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+
+cuda.init()
+device = cuda.Device(0)
 
 class UserViewSet(viewsets.ModelViewSet):
     """
@@ -86,10 +93,12 @@ def image_processing(request):
 @api_view(['GET'])
 def system_usage(request):
     print("READ SYSTEM USAGE")
+    mem_res = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
     response = HttpResponse(json.dumps({
         'cpu_count': psutil.cpu_count(),
         'ram_usage': dict(psutil.virtual_memory()._asdict()),
-        'cpu_usage': psutil.cpu_percent(percpu = True)
+        'cpu_usage': psutil.cpu_percent(percpu = True),
+        'gpu_usage': np.around(100 * (mem_res.used / mem_res.total), decimals = 1)
     }))
     response["Content-Type"] = 'application/json'
     response.status_code = status.HTTP_200_OK
@@ -101,8 +110,6 @@ def id_generator(size, chars=string.ascii_uppercase + string.digits):
 
 @api_view(['POST'])
 def kernel_processing(request):
-    cuda.init()
-    device = cuda.Device(0)
     ctx = device.make_context()
 
     # Kernel
@@ -228,7 +235,6 @@ def kernel_processing(request):
     for i in range(pages):
         tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
-    # Zwrocenie na front
     ctx.pop()
 
     # Odczytanie go w formie binarnej
