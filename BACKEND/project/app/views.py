@@ -3,7 +3,7 @@ from rest_framework import viewsets, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
 from django.http import FileResponse, HttpResponse
-import io, os, json
+import io, os, json, random, string
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
  
@@ -96,6 +96,9 @@ def system_usage(request):
     print("RETURN SYSTEM USAGE")
     return response
 
+def id_generator(size, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
 @api_view(['POST'])
 def kernel_processing(request):
     cuda.init()
@@ -176,8 +179,8 @@ def kernel_processing(request):
     pages = parameters.get("pages")
     X = int(parameters.get("X"))
     Y = int(parameters.get("Y"))
-    R = int(parameters.get("switches")[0]["R"])
-    T = int(parameters.get("switches")[0]["T"])
+    R = int(parameters.get("R"))
+    T = int(parameters.get("T"))
 
     # Save image and load to tifffile, then remove from disk
     path = default_storage.save(filename, ContentFile(request.data["image"].read()))
@@ -220,7 +223,7 @@ def kernel_processing(request):
     secs = start.time_till(end)*1e-3
     time += secs
 
-    tmp_name = f"processed_tif.tif"
+    tmp_name = f"{id_generator(15)}.tif"
     # Zapisanie przerobionego pliku na dysk
     for i in range(pages):
         tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
