@@ -103,7 +103,8 @@ def kernel_processing(request):
     ctx = device.make_context()
 
     # Kernel
-    # Każdy wątek oblicza jeden element result z m - czyli wątków jest X * Y.
+    # m może zawierać kilka stron.
+    # Każdy wątek oblicza jeden element result z jednej strony m - czyli wątków jest X * Y.
     # Każdy wątek oblicza sobie dwie ostatnie pętle.
     mod = SourceModule("""
     #define MAX(a, b) (a)<(b)?(b):(a)
@@ -122,6 +123,9 @@ def kernel_processing(request):
     {
         int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
         int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
+        // X * Y * pageNumber
+        int pageId = X * Y * blockIdx.z;
+
         int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound, p, c;
         if ((row < X) && (col < Y)) {
             lxbound = MAX(0, row - R);
@@ -144,9 +148,10 @@ def kernel_processing(request):
 
                     // If
                     if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
-                        p += mask[drx * (2*R+1) + dry];
-                        if (m[x * Y + y] + T <= m[row * Y + col] ) {
-                            c += mask[drx * (2*R+1) + dry];
+                        int maskValue = mask[drx * (2*R+1) + dry];
+                        p += maskValue;
+                        if (m[pageId + (x * Y + y)] + T <= m[pageId + (row * Y + col)]) {
+                            c += maskValue;
                         }
                     }
 
@@ -158,7 +163,7 @@ def kernel_processing(request):
                     // result[row * Y + col] = m[row * Y + col];
                 }
             }
-            result[row * Y + col] = (256 * c) / p;
+            result[pageId + (row * Y + col)] = (256 * c) / p;
         }
     }
     """)
@@ -169,7 +174,6 @@ def kernel_processing(request):
     filename = parameters.get("filename")
     method = parameters.get("method")
     pages = parameters.get("pages")
-    # pages = 1
     X = int(parameters.get("X"))
     Y = int(parameters.get("Y"))
     R = int(parameters.get("switches")[0]["R"])
@@ -183,45 +187,43 @@ def kernel_processing(request):
     # Mask and result array
     mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2*R+1)] for j in range(2*R + 1)]
     mask = np.array(mask, dtype=np.int32)
-    result = np.zeros((Y, X), dtype=np.int32)
 
     # Zmienne do pomiaru czasu na GPU
     start = cuda.Event()
     end = cuda.Event()
     time = 0
 
-    for page in range(pages):
+    # # Dane GPU
+    start.record()
+    # All pages
+    m_gpu = gpuarray.to_gpu(img.astype(np.int32))
+    mask_gpu = gpuarray.to_gpu(mask)
+    result_gpu = gpuarray.empty((pages, Y, X), dtype=np.int32)
 
-        # # Dane GPU
-        start.record()
-        m_gpu = gpuarray.to_gpu(img[page].astype(np.int32))
-        mask_gpu = gpuarray.to_gpu(mask)
-        result_gpu = gpuarray.empty((Y, X), dtype=np.int32)
+    # # Wywołanie kernel'a
+    gpu_int_mask_multi_thread(
+        np.int32(X),
+        np.int32(Y),
+        np.int32(R),
+        np.int32(T),
+        mask_gpu,
+        m_gpu,
+        result_gpu,
+        block=(32, 32, 1),
+        grid=((X+31)//32, (X+31)//32, pages)
+    )
 
-        # # Wywołanie kernel'a
-        gpu_int_mask_multi_thread(
-            np.int32(X),
-            np.int32(Y),
-            np.int32(R),
-            np.int32(T),
-            mask_gpu,
-            m_gpu,
-            result_gpu,
-            block=(32, 32, 1),
-            grid=((X+31)//32, (X+31)//32, 1)
-        )
+    # # Wynik GPU
+    result_gpu_kernel = result_gpu.get()
+    end.record()
+    end.synchronize()
+    secs = start.time_till(end)*1e-3
+    time += secs
 
-        # # Wynik GPU
-        result_gpu_kernel = result_gpu.get()
-        end.record()
-        end.synchronize()
-        secs = start.time_till(end)*1e-3
-        time += secs
-
-        tmp_name = f"processed_tif.tif"
-        # Zapisanie przerobionego pliku na dysk
-        tab = result_gpu_kernel.astype(img.dtype)
-        tifffile.imwrite(tmp_name, tab, append=True)
+    tmp_name = f"processed_tif.tif"
+    # Zapisanie przerobionego pliku na dysk
+    for i in range(pages):
+        tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
     # Zwrocenie na front
     ctx.pop()
@@ -239,8 +241,3 @@ def kernel_processing(request):
     response["Content-Type"] = 'multipart/form-data'
     response.status_code = status.HTTP_200_OK
     return response
-    # return Response({
-        # "result": result_gpu_kernel,
-        # "time": secs,
-        # "shape": img.shape
-    # }, status=status.HTTP_200_OK)
