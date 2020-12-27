@@ -12,7 +12,6 @@ from .models import Person
 
 # PyCuda
 import pycuda.driver as cuda
-import pycuda.autoinit
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
 
@@ -26,10 +25,10 @@ import nvidia_smi
 # Benchmark
 import time
 
+# GPU initializations
 nvidia_smi.nvmlInit()
 handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
-
-cuda.init()
+import pycuda.autoinit
 device = cuda.Device(0)
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -181,7 +180,7 @@ def kernel_processing(request):
 
     # Get parameters from request data
     parameters = json.loads(request.data.get("processing_info"))
-    filename = parameters.get("filename")
+    filename = id_generator(10) + parameters.get("filename")
     method = parameters.get("method")
     pages = parameters.get("pages")
     X = int(parameters.get("X"))
@@ -223,7 +222,7 @@ def kernel_processing(request):
         grid=((X+31)//32, (X+31)//32, pages)
     )
 
-    # # Wynik GPU
+    # Wynik GPU
     result_gpu_kernel = result_gpu.get()
     end.record()
     end.synchronize()
@@ -235,7 +234,11 @@ def kernel_processing(request):
     for i in range(pages):
         tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
+    # Free gpu memory
     ctx.pop()
+    del mask_gpu
+    del m_gpu
+    del result_gpu
 
     # Odczytanie go w formie binarnej
     with open(tmp_name, 'rb') as fp:
