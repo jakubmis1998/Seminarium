@@ -4,16 +4,11 @@ from django.contrib import admin
 from app import views
 
 router = routers.DefaultRouter()
-router.register(r'users/', views.UserViewSet)
-router.register(r'people/', views.PersonViewSet)
+router.register(r'kernel_processing', views.KernelProcessing, basename="kernel_processing")
+router.register(r'system_usage', views.SystemUsage, basename="system_usage")
 
 urlpatterns = [
     path('', include(router.urls)),
     path('admin/', admin.site.urls),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
-    path('example/', views.example),
-    path('read_and_return/', views.read_and_return),
-    path('image_processing/', views.image_processing),
-    path('system_usage/', views.system_usage),
-    path('kernel_processing/', views.kernel_processing),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ]
