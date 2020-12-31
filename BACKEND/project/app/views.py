@@ -15,25 +15,24 @@ import numpy as np
 from math import sqrt
 import tifffile
 import psutil
-import nvidia_smi
+import nvgpu
+
 
 # Benchmark
 import time
 
 # GPU initializations
-nvidia_smi.nvmlInit()
-handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
 import pycuda.autoinit
 
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
         print("READ SYSTEM USAGE")
-        mem_res = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        info = nvgpu.gpu_info()[0]
         response = HttpResponse(json.dumps({
             'cpu_count': psutil.cpu_count(),
             'ram_usage': dict(psutil.virtual_memory()._asdict()),
             'cpu_usage': psutil.cpu_percent(percpu = True),
-            'gpu_usage': np.around(100 * (mem_res.used / mem_res.total), decimals = 1)
+            'gpu_usage': np.around(info['mem_used_percent'], decimals = 1)
         }))
         response["Content-Type"] = 'application/json'
         response.status_code = status.HTTP_200_OK
