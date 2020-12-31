@@ -24,7 +24,6 @@ import time
 nvidia_smi.nvmlInit()
 handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
 import pycuda.autoinit
-device = cuda.Device(0)
 
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
@@ -46,7 +45,7 @@ def id_generator(size, chars=string.ascii_uppercase + string.digits):
 
 class KernelProcessing(viewsets.ViewSet):
     def create(self, request):
-        ctx = device.make_context()
+        ctx = cuda.Device(0).make_context()
 
         # Kernel
         # m może zawierać kilka stron.
@@ -171,11 +170,9 @@ class KernelProcessing(viewsets.ViewSet):
         for i in range(pages):
             tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
-        # Free gpu memory
+        # Finish life of gpu objects - free memory
         ctx.pop()
-        del mask_gpu
-        del m_gpu
-        del result_gpu
+        del mask_gpu, m_gpu, result_gpu, mod, gpu_int_mask_multi_thread, start, end, ctx
 
         # Odczytanie go w formie binarnej
         with open(tmp_name, 'rb') as fp:
