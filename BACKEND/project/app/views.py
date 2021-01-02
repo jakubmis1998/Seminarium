@@ -4,8 +4,14 @@ from django.http import FileResponse, HttpResponse
 import io, os, json, random, string
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from app.models import Progress
+from app.serializers import ProgressSerializer
+
+# Jars
+import subprocess
 
 # PyCuda
+import pycuda.autoinit
 import pycuda.driver as cuda
 import pycuda.gpuarray as gpuarray
 from pycuda.compiler import SourceModule
@@ -17,12 +23,9 @@ import tifffile
 import psutil
 import nvgpu
 
-
 # Benchmark
 import time
 
-# GPU initializations
-import pycuda.autoinit
 
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
@@ -36,11 +39,96 @@ class SystemUsage(viewsets.ViewSet):
         }))
         response["Content-Type"] = 'application/json'
         response.status_code = status.HTTP_200_OK
-        print("RETURN SYSTEM USAGE")
         return response
 
-def id_generator(size, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for _ in range(size))
+# def id_generator(size, chars=string.ascii_uppercase + string.digits):
+#     return ''.join(random.choice(chars) for _ in range(size))
+
+class ProgressViewSet(viewsets.ModelViewSet):
+    queryset = Progress.objects.all()
+    serializer_class = ProgressSerializer
+
+class JarProcessing(viewsets.ViewSet):
+    def create(self, request):
+        # Get parameters from request data
+        parameters = json.loads(request.data.get("processing_info"))
+        original_filename = parameters.get("filename")
+        filename = original_filename
+        method = parameters.get("method")
+        mask_name = parameters.get("maskName")
+        R = parameters.get("R")
+        T = parameters.get("T")
+
+        # Save image on disk
+        if not os.path.isfile(filename):
+            path = default_storage.save(filename, ContentFile(request.data["image"].read()))
+        output_filename = filename.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.tif'
+
+        progress = Progress(name = output_filename, progress = 0)
+        progress.save()
+
+        # Run multithreading java process
+        process = subprocess.Popen(
+            [
+                'java',
+                '-jar',
+                'fastSDA.jar',
+                '-file',
+                'file={}'.format(filename),
+                '-r',
+                'r={}'.format(R),
+                '-t',
+                't={}'.format(T),
+                '-method',
+                'method={}'.format(method),
+                '-mask',
+                'mask=mask.json'
+            ],
+            stdout=subprocess.PIPE,
+            universal_newlines=True
+        )
+
+        while True:
+            # Read stdout and cast from bytes to string
+            output = process.stdout.readline().strip()
+
+            # Print stdout if not empty
+            if output:
+                if "Progress" in output:
+                    index = output.find(" p=")
+                    percent = 0
+                    progress.progress = int(output[index+3:])
+                    progress.save()
+
+                # Thread has finished image processing
+                if "Finished" in output:
+                    # It is able to open that image and send back to the front
+                    progress.delete()
+            
+            # Check if process has finished
+            return_code = process.poll()
+
+            # If return_code has not None value, process has finished
+            if return_code is not None:
+                break
+            
+            time.sleep(0.5)
+
+        # Odczytanie go w formie binarnej
+        with open(output_filename, 'rb') as fp:
+            data = fp.read()
+
+        if os.path.isfile(filename):
+            os.remove(filename)
+        os.remove(output_filename)
+
+        response = FileResponse(
+            io.BytesIO(data),
+            as_attachment=True
+        )
+        response["Content-Type"] = 'multipart/form-data'
+        response.status_code = status.HTTP_200_OK
+        return response
 
 class KernelProcessing(viewsets.ViewSet):
     def create(self, request):
@@ -115,8 +203,9 @@ class KernelProcessing(viewsets.ViewSet):
 
         # Get parameters from request data
         parameters = json.loads(request.data.get("processing_info"))
-        filename = id_generator(10) + parameters.get("filename")
+        filename = parameters.get("filename")
         method = parameters.get("method")
+        mask_name = parameters.get("maskName")
         pages = parameters.get("pages")
         X = int(parameters.get("X"))
         Y = int(parameters.get("Y"))
@@ -124,12 +213,14 @@ class KernelProcessing(viewsets.ViewSet):
         T = int(parameters.get("T"))
 
         # Save image and load to tifffile, then remove from disk
-        path = default_storage.save(filename, ContentFile(request.data["image"].read()))
+        if not os.path.isfile(filename):
+            path = default_storage.save(filename, ContentFile(request.data["image"].read()))
         img = tifffile.imread(filename)
-        os.remove(filename)
+        if os.path.isfile(filename):
+            os.remove(filename)
 
         # Mask and result array
-        mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2*R+1)] for j in range(2*R + 1)]
+        mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2 * R + 1)] for j in range(2 * R + 1)]
         mask = np.array(mask, dtype=np.int32)
 
         # Zmienne do pomiaru czasu na GPU
@@ -164,19 +255,20 @@ class KernelProcessing(viewsets.ViewSet):
         secs = start.time_till(end)*1e-3
         time += secs
 
-        tmp_name = f"{id_generator(15)}.tif"
+        output_filename = filename.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.tif'
         # Zapisanie przerobionego pliku na dysk
         for i in range(pages):
-            tifffile.imwrite(tmp_name, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
+            tifffile.imwrite(output_filename, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
         # Finish life of gpu objects - free memory
         ctx.pop()
         del mask_gpu, m_gpu, result_gpu, mod, gpu_int_mask_multi_thread, start, end, ctx
 
         # Odczytanie go w formie binarnej
-        with open(tmp_name, 'rb') as fp:
+        with open(output_filename, 'rb') as fp:
             data = fp.read()
-        os.remove(tmp_name)
+        if os.path.isfile(output_filename):
+            os.remove(output_filename)
         print("time: ", time)
 
         response = FileResponse(
