@@ -1,4 +1,3 @@
-*.hdf5
 BACKEND/venv/*
 *.sqlite3
 *__pycache__*
