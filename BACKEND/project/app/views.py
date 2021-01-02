@@ -72,7 +72,7 @@ class JarProcessing(viewsets.ViewSet):
             [
                 'java',
                 '-jar',
-                'fastSDA.jar',
+                '/tiffProcessing/fastSDA.jar',
                 '-file',
                 'file={}'.format(filename),
                 '-r',
@@ -82,7 +82,7 @@ class JarProcessing(viewsets.ViewSet):
                 '-method',
                 'method={}'.format(method),
                 '-mask',
-                'mask=mask.json'
+                'mask=/tiffProcessing/{}'.format(mask_name + '.json')
             ],
             stdout=subprocess.PIPE,
             universal_newlines=True
