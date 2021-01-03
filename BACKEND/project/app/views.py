@@ -21,6 +21,7 @@ import numpy as np
 from math import sqrt
 import tifffile
 import psutil
+from cpuinfo import get_cpu_info
 import nvgpu
 
 # Benchmark
@@ -30,12 +31,14 @@ import time
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
         print("READ SYSTEM USAGE")
-        info = nvgpu.gpu_info()[0]
+        gpu_info = nvgpu.gpu_info()[0]
         response = HttpResponse(json.dumps({
+            'cpu_name': get_cpu_info()['brand_raw'],
             'cpu_count': psutil.cpu_count(),
             'ram_usage': dict(psutil.virtual_memory()._asdict()),
             'cpu_usage': psutil.cpu_percent(percpu = True),
-            'gpu_usage': np.around(info['mem_used_percent'], decimals = 1)
+            'gpu_name': gpu_info['type'],
+            'gpu_usage': np.around(gpu_info['mem_used_percent'], decimals = 1)
         }))
         response["Content-Type"] = 'application/json'
         response.status_code = status.HTTP_200_OK
