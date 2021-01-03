@@ -7,5 +7,5 @@ numpy
 tifffile
 psutil
 pycuda
-nvidia-ml-py3
+nvgpu
 py-cpuinfo
