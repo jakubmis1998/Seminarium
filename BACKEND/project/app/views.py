@@ -31,15 +31,23 @@ import time
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
         print("READ SYSTEM USAGE")
-        gpu_info = nvgpu.gpu_info()[0]
-        response = HttpResponse(json.dumps({
-            'cpu_name': get_cpu_info()['brand_raw'],
-            'cpu_count': psutil.cpu_count(),
-            'ram_usage': dict(psutil.virtual_memory()._asdict()),
-            'cpu_usage': psutil.cpu_percent(percpu = True),
-            'gpu_name': gpu_info['type'],
-            'gpu_usage': np.around(gpu_info['mem_used_percent'], decimals = 1)
-        }))
+        try:
+            gpu_info = nvgpu.gpu_info()[0]
+            response = HttpResponse(json.dumps({
+                'cpu_name': get_cpu_info()['brand_raw'],
+                'cpu_count': psutil.cpu_count(),
+                'ram_usage': dict(psutil.virtual_memory()._asdict()),
+                'cpu_usage': psutil.cpu_percent(percpu = True),
+                'gpu_name': gpu_info['type'],
+                'gpu_usage': np.around(gpu_info['mem_used_percent'], decimals = 1)
+            }))
+        except:
+            response = HttpResponse(json.dumps({
+                'cpu_name': get_cpu_info()['brand_raw'],
+                'cpu_count': psutil.cpu_count(),
+                'ram_usage': dict(psutil.virtual_memory()._asdict()),
+                'cpu_usage': psutil.cpu_percent(percpu = True),
+            }))
         response["Content-Type"] = 'application/json'
         response.status_code = status.HTTP_200_OK
         return response
