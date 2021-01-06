@@ -32,7 +32,6 @@ from io import BytesIO
 
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
-        print("READ SYSTEM USAGE")
         try:
             gpu_info = nvgpu.gpu_info()[0]
             response = HttpResponse(json.dumps({
@@ -205,17 +204,13 @@ class KernelProcessing(viewsets.ViewSet):
                     from = MAX(0, col - ry + 1);
                     to = MIN(Y, col + ry);
                     for(y = from; y < to; y++) {
-                        // If
-                        if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
-                            float maskValue = mask[(int) (my_sqrt((x - row) * (x - row) + (y - col) * (y - col)) / R * maskLength)];
-                            p += maskValue;
-                            if (m[pageId + (x * Y + y)] + T <= m[pageId + (row * Y + col)]) {
-                                c += maskValue;
-                            }
-                        }
+                        // Przesuniecie bitowe
+                        float maskValue = mask[(int) (my_sqrt((x - row) * (x - row) + (y - col) * (y - col)) / R * maskLength)];
+                        p += maskValue;
+                        c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * maskValue);
                     }
                 }
-                result[pageId + (row * Y + col)] = (int) ((256 * c) / p);
+                result[pageId + (row * Y + col)] = 256 + (256 * c) / p;
             }
         }
         __global__ void gpu_int_mask_sda(const int X, const int Y, const int R, const int T, const int maskLength, const int *mask, const int *m, int *result)
@@ -225,7 +220,8 @@ class KernelProcessing(viewsets.ViewSet):
             // X * Y * pageNumber
             int pageId = X * Y * blockIdx.z;
 
-            int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound, p, c;
+            int x, y, dx, ry, drx, dry, from, to, lxbound, rxbound;
+            float p, c;
             if ((row < X) && (col < Y)) {
                 lxbound = MAX(0, row - R);
                 rxbound = MIN(X, row + R + 1);
@@ -244,23 +240,23 @@ class KernelProcessing(viewsets.ViewSet):
                         dry = y + R - col;
 
                         // If
-                        if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
-                            int maskValue = mask[drx * (2*R+1) + dry];
-                            p += maskValue;
-                            if (m[pageId + (x * Y + y)] + T <= m[pageId + (row * Y + col)]) {
-                                c += maskValue;
-                            }
-                        }
+                        //if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
+                        //    int maskValue = mask[drx * (2*R+1) + dry];
+                        //    p += maskValue;
+                        //    if (m[pageId + (x * Y + y)] + T <= m[pageId + (row * Y + col)]) {
+                        //        c += maskValue;
+                        //    }
+                        //}
 
                         // Przesuniecie bitowe
-                        //p += mask[drx * (2*R+1) + dry];
-                        //c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                        p += mask[drx * (2*R+1) + dry];
+                        c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
 
                         // Przepisanie obrazka
                         // result[row * Y + col] = m[row * Y + col];
                     }
                 }
-                result[pageId + (row * Y + col)] = (256 * c) / p;
+                result[pageId + (row * Y + col)] = 256 + (256 * c) / p;
             }
         }
         """)
