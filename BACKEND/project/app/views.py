@@ -65,38 +65,50 @@ class JarProcessing(viewsets.ViewSet):
     def create(self, request):
         # Get parameters from request data
         parameters = json.loads(request.data.get("processing_info"))
-        original_filename = parameters.get("filename")
-        filename = original_filename
+        filename = parameters.get("filename")
         method = parameters.get("method")
-        mask_name = parameters.get("maskName")
+        predefinied_mask = request.data.get("mask")
+        mask_filename = ''
         R = parameters.get("R")
         T = parameters.get("T")
 
-        # Save image on disk
+        # Save image on disk and create output filename
         if not os.path.isfile(filename):
-            path = default_storage.save(filename, ContentFile(request.data["image"].read()))
+            default_storage.save(filename, ContentFile(request.data["image"].read()))
         output_filename = filename.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.tif'
 
+        # Save progress data in database
         progress = Progress(name = output_filename, progress = 0)
         progress.save()
 
+        process_args = [
+            'java',
+            '-jar',
+            '/tiffProcessing/fastSDA.jar',
+            '-file',
+            'file={}'.format(filename),
+            '-r',
+            'r={}'.format(R),
+            '-t',
+            't={}'.format(T),
+            '-method',
+            'method={}'.format(method),
+        ]
+
+        # Custom mask from json
+        if predefinied_mask:
+            mask_filename = predefinied_mask.name.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.json'
+
+            # Save mask and append to process arguments
+            if not os.path.isfile(mask_filename):
+                default_storage.save(mask_filename, predefinied_mask)
+
+            process_args.append("-mask")
+            process_args.append("mask={}".format(mask_filename))
+
         # Run multithreading java process
         process = subprocess.Popen(
-            [
-                'java',
-                '-jar',
-                '/tiffProcessing/fastSDA.jar',
-                '-file',
-                'file={}'.format(filename),
-                '-r',
-                'r={}'.format(R),
-                '-t',
-                't={}'.format(T),
-                '-method',
-                'method={}'.format(method),
-                '-mask',
-                'mask=/tiffProcessing/{}'.format(mask_name + '.json')
-            ],
+            process_args,
             stdout=subprocess.PIPE,
             universal_newlines=True
         )
@@ -127,14 +139,20 @@ class JarProcessing(viewsets.ViewSet):
             
             time.sleep(0.5)
 
-        # Odczytanie go w formie binarnej
+        # Remove custom mask
+        if predefinied_mask and os.path.isfile(mask_filename):
+            os.remove(mask_filename)
+
+        # Read binary data
         with open(output_filename, 'rb') as fp:
             data = fp.read()
 
+        # Remove image and output image
         if os.path.isfile(filename):
             os.remove(filename)
         os.remove(output_filename)
 
+        # Response
         response = FileResponse(
             io.BytesIO(data),
             as_attachment=True
@@ -147,7 +165,7 @@ class KernelProcessing(viewsets.ViewSet):
     def create(self, request):
         ctx = cuda.Device(0).make_context()
 
-        # Kernel
+        # Kernele
         # m może zawierać kilka stron.
         # Każdy wątek oblicza jeden element result z jednej strony m - czyli wątków jest X * Y.
         # Każdy wątek oblicza sobie dwie ostatnie pętle.
@@ -251,7 +269,7 @@ class KernelProcessing(viewsets.ViewSet):
         parameters = json.loads(request.data.get("processing_info"))
         filename = parameters.get("filename")
         method = parameters.get("method")
-        predefinied_mask = parameters.get("mask")
+        predefinied_mask = request.data.get("mask")
         pages = parameters.get("pages")
         X = int(parameters.get("X"))
         Y = int(parameters.get("Y"))
@@ -260,12 +278,12 @@ class KernelProcessing(viewsets.ViewSet):
     
         # Save image and load to tifffile, then remove from disk
         if not os.path.isfile(filename):
-            path = default_storage.save(filename, ContentFile(request.data["image"].read()))
+            default_storage.save(filename, ContentFile(request.data["image"].read()))
         img = tifffile.imread(filename)
         if os.path.isfile(filename):
             os.remove(filename)
 
-        # Mask and result array
+        # Mask / Custom Mask and result array
         if not predefinied_mask:
             gpu_sda = mod.get_function("gpu_int_mask_sda")
             mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2 * R + 1)] for j in range(2 * R + 1)]
@@ -275,25 +293,24 @@ class KernelProcessing(viewsets.ViewSet):
             mask = json.loads(predefinied_mask.read().decode("utf-8"))["mask"]
             mask = np.array(mask, dtype=np.float32)
 
-        # Zmienne do pomiaru czasu na GPU
+        # Benchmark
         start = cuda.Event()
         end = cuda.Event()
         time = 0
 
-        # # Dane GPU
+        # GPU data
         start.record()
-        # All pages
         m_gpu = gpuarray.to_gpu(img.astype(np.int32))
         mask_gpu = gpuarray.to_gpu(mask)
         result_gpu = gpuarray.empty((pages, Y, X), dtype=np.int32)
 
-        # # Wywołanie kernel'a
+        # Kernel call
         gpu_sda(
             np.int32(X),
             np.int32(Y),
             np.int32(R),
             np.int32(T),
-            np.int32(mask.shape[0]),  # Only for predefinied mask
+            np.int32(mask.shape[0]),  # Used only for predefinied mask
             mask_gpu,
             m_gpu,
             result_gpu,
@@ -301,15 +318,15 @@ class KernelProcessing(viewsets.ViewSet):
             grid=((X+31)//32, (X+31)//32, pages)
         )
 
-        # Wynik GPU
+        # GPU results
         result_gpu_kernel = result_gpu.get()
         end.record()
         end.synchronize()
         secs = start.time_till(end)*1e-3
         time += secs
 
+        # Save processed image
         output_filename = filename.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.tif'
-        # Zapisanie przerobionego pliku na dysk
         for i in range(pages):
             tifffile.imwrite(output_filename, result_gpu_kernel[i].astype(img.dtype), append=True, compression='deflate')
 
@@ -317,13 +334,14 @@ class KernelProcessing(viewsets.ViewSet):
         ctx.pop()
         del mask_gpu, m_gpu, result_gpu, mod, gpu_sda, start, end, ctx
 
-        # Odczytanie go w formie binarnej
+        # Read binary data and remove
         with open(output_filename, 'rb') as fp:
             data = fp.read()
         if os.path.isfile(output_filename):
             os.remove(output_filename)
         print("time: ", time)
 
+        # Response
         response = FileResponse(
             io.BytesIO(data),
             as_attachment=True
