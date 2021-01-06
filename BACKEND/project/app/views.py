@@ -27,6 +27,8 @@ import nvgpu
 # Benchmark
 import time
 
+from io import BytesIO
+
 
 class SystemUsage(viewsets.ViewSet):
     def list(self, request):
@@ -162,7 +164,43 @@ class KernelProcessing(viewsets.ViewSet):
             int abs_dx = abs(dx);
             return int(ceil(my_sqrt(R*R - abs_dx*abs_dx)));
         }
-        __global__ void gpu_int_mask_multi_thread(const int X, const int Y, const int R, const int T, const int *mask, const int *m, int *result)
+        __global__ void gpu_float_mask_sda(const int X, const int Y, const int R, const int T, const int maskLength, const float *mask, const int *m, int *result)
+        {
+            int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
+            int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
+            // X * Y * pageNumber
+            int pageId = X * Y * blockIdx.z;
+
+            int x, y, dx, ry, from, to, lxbound, rxbound;
+            float p, c;
+            if ((row < X) && (col < Y)) {
+                lxbound = MAX(0, row - R);
+                rxbound = MIN(X, row + R + 1);
+                p = 0;
+                c = 0;
+                for(x = lxbound; x < rxbound; x++) {
+                    dx = row - x;
+
+                    // (getHalfRing, ry jako int)
+                    ry = getHalfRing(R, dx);
+
+                    from = MAX(0, col - ry + 1);
+                    to = MIN(Y, col + ry);
+                    for(y = from; y < to; y++) {
+                        // If
+                        if ((x - row) * (x - row) + (y - col) * (y - col) < R * R) {
+                            float maskValue = mask[(int) (my_sqrt((x - row) * (x - row) + (y - col) * (y - col)) / R * maskLength)];
+                            p += maskValue;
+                            if (m[pageId + (x * Y + y)] + T <= m[pageId + (row * Y + col)]) {
+                                c += maskValue;
+                            }
+                        }
+                    }
+                }
+                result[pageId + (row * Y + col)] = (int) ((256 * c) / p);
+            }
+        }
+        __global__ void gpu_int_mask_sda(const int X, const int Y, const int R, const int T, const int maskLength, const int *mask, const int *m, int *result)
         {
             int row = blockIdx.y * blockDim.y + threadIdx.y; // numer wiersza macierzy m i result
             int col = blockIdx.x * blockDim.x + threadIdx.x; // numer kolumny macierzy m i result
@@ -178,10 +216,8 @@ class KernelProcessing(viewsets.ViewSet):
                 for(x = lxbound; x < rxbound; x++) {
                     dx = row - x;
                     drx = dx + R;
-                    // 1 SPOSOB (R - liczone po kwadracie)
-                    //ry = R;
 
-                    // 2 SPOSOB (getHalfRing, ry jako int)
+                    // (getHalfRing, ry jako int)
                     ry = getHalfRing(R, dx);
 
                     from = MAX(0, col - ry + 1);
@@ -210,19 +246,18 @@ class KernelProcessing(viewsets.ViewSet):
             }
         }
         """)
-        gpu_int_mask_multi_thread = mod.get_function("gpu_int_mask_multi_thread")
 
         # Get parameters from request data
         parameters = json.loads(request.data.get("processing_info"))
         filename = parameters.get("filename")
         method = parameters.get("method")
-        mask_name = parameters.get("maskName")
+        predefinied_mask = parameters.get("mask")
         pages = parameters.get("pages")
         X = int(parameters.get("X"))
         Y = int(parameters.get("Y"))
         R = int(parameters.get("R"))
         T = int(parameters.get("T"))
-
+    
         # Save image and load to tifffile, then remove from disk
         if not os.path.isfile(filename):
             path = default_storage.save(filename, ContentFile(request.data["image"].read()))
@@ -231,8 +266,14 @@ class KernelProcessing(viewsets.ViewSet):
             os.remove(filename)
 
         # Mask and result array
-        mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2 * R + 1)] for j in range(2 * R + 1)]
-        mask = np.array(mask, dtype=np.int32)
+        if not predefinied_mask:
+            gpu_sda = mod.get_function("gpu_int_mask_sda")
+            mask = [[1 if (R - i)*(R - i) + (R - j)*(R - j) <= R * R else 0 for i in range(2 * R + 1)] for j in range(2 * R + 1)]
+            mask = np.array(mask, dtype=np.int32)
+        else:
+            gpu_sda = mod.get_function("gpu_float_mask_sda")
+            mask = json.loads(predefinied_mask.read().decode("utf-8"))["mask"]
+            mask = np.array(mask, dtype=np.float32)
 
         # Zmienne do pomiaru czasu na GPU
         start = cuda.Event()
@@ -247,11 +288,12 @@ class KernelProcessing(viewsets.ViewSet):
         result_gpu = gpuarray.empty((pages, Y, X), dtype=np.int32)
 
         # # Wywołanie kernel'a
-        gpu_int_mask_multi_thread(
+        gpu_sda(
             np.int32(X),
             np.int32(Y),
             np.int32(R),
             np.int32(T),
+            np.int32(mask.shape[0]),  # Only for predefinied mask
             mask_gpu,
             m_gpu,
             result_gpu,
@@ -273,7 +315,7 @@ class KernelProcessing(viewsets.ViewSet):
 
         # Finish life of gpu objects - free memory
         ctx.pop()
-        del mask_gpu, m_gpu, result_gpu, mod, gpu_int_mask_multi_thread, start, end, ctx
+        del mask_gpu, m_gpu, result_gpu, mod, gpu_sda, start, end, ctx
 
         # Odczytanie go w formie binarnej
         with open(output_filename, 'rb') as fp:
