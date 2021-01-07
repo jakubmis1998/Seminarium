@@ -207,7 +207,7 @@ class KernelProcessing(viewsets.ViewSet):
                         // Przesuniecie bitowe
                         float maskValue = mask[(int) (my_sqrt((x - row) * (x - row) + (y - col) * (y - col)) / R * maskLength)];
                         p += maskValue;
-                        c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * maskValue);
+                        c += ((((m[pageId + (row * Y + col)] - T) - m[pageId + (x * Y + y)]) >> 31) * maskValue);
                     }
                 }
                 result[pageId + (row * Y + col)] = 256 + (256 * c) / p;
@@ -250,7 +250,7 @@ class KernelProcessing(viewsets.ViewSet):
 
                         // Przesuniecie bitowe
                         p += mask[drx * (2*R+1) + dry];
-                        c += ((((m[row * Y + col] - T) - m[x * Y + y]) >> 31) * mask[drx * (2*R+1) + dry]);
+                        c += ((((m[pageId + (row * Y + col)] - T) - m[pageId + (x * Y + y)]) >> 31) * mask[drx * (2*R+1) + dry]);
 
                         // Przepisanie obrazka
                         // result[row * Y + col] = m[row * Y + col];
