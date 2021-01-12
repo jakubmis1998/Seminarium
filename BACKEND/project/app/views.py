@@ -66,7 +66,7 @@ class JarProcessing(viewsets.ViewSet):
         parameters = json.loads(request.data.get("processing_info"))
         filename = parameters.get("filename")
         method = parameters.get("method")
-        predefinied_mask = request.data.get("mask")
+        predefined_mask = request.data.get("mask")
         mask_filename = ''
         R = parameters.get("R")
         T = parameters.get("T")
@@ -95,12 +95,12 @@ class JarProcessing(viewsets.ViewSet):
         ]
 
         # Custom mask from json
-        if predefinied_mask:
-            mask_filename = predefinied_mask.name.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.json'
+        if predefined_mask:
+            mask_filename = predefined_mask.name.split('.')[0] + '_r{}'.format(R) + '_t{}'.format(T) + '_' + method + '.json'
 
             # Save mask and append to process arguments
             if not os.path.isfile(mask_filename):
-                default_storage.save(mask_filename, predefinied_mask)
+                default_storage.save(mask_filename, predefined_mask)
 
             process_args.append("-mask")
             process_args.append("mask={}".format(mask_filename))
@@ -139,7 +139,7 @@ class JarProcessing(viewsets.ViewSet):
             time.sleep(0.5)
 
         # Remove custom mask
-        if predefinied_mask and os.path.isfile(mask_filename):
+        if predefined_mask and os.path.isfile(mask_filename):
             os.remove(mask_filename)
 
         # Read binary data
@@ -301,6 +301,7 @@ class KernelProcessing(viewsets.ViewSet):
         result_gpu = gpuarray.empty((pages, Y, X), dtype=np.int32)
 
         # Kernel call
+        BLOCK_SIZE = 32
         gpu_sda(
             np.int32(X),
             np.int32(Y),
@@ -310,8 +311,8 @@ class KernelProcessing(viewsets.ViewSet):
             mask_gpu,
             m_gpu,
             result_gpu,
-            block=(32, 32, 1),
-            grid=((X+31)//32, (X+31)//32, pages)
+            block=(BLOCK_SIZE, BLOCK_SIZE, 1),
+            grid=((X + BLOCK_SIZE - 1)//BLOCK_SIZE, (X + BLOCK_SIZE - 1)//BLOCK_SIZE, pages)
         )
 
         # GPU results
