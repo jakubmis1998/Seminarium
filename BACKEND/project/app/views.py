@@ -53,9 +53,6 @@ class SystemUsage(viewsets.ViewSet):
         response.status_code = status.HTTP_200_OK
         return response
 
-# def id_generator(size, chars=string.ascii_uppercase + string.digits):
-#     return ''.join(random.choice(chars) for _ in range(size))
-
 class ProgressViewSet(viewsets.ModelViewSet):
     queryset = Progress.objects.all()
     serializer_class = ProgressSerializer
